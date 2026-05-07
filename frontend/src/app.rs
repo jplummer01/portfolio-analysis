@@ -1,6 +1,9 @@
 use leptos::prelude::*;
 
-use crate::models::{AnalysisResponse, IngestResponse, RecommendResponse, ScoredCandidate};
+use crate::models::{
+    AnalysisResponse, AssetAllocation, AssetAllocationEntry, FeeAnalysis, IngestResponse,
+    RecommendResponse, ScoredCandidate, SectorExposure, SectorExposureEntry,
+};
 
 const DISCLAIMER: &str = "For informational purposes only; not financial advice.";
 const STYLE: &str = r#"
@@ -224,6 +227,28 @@ thead th {
 }
 .fill.negative {
   background: linear-gradient(90deg, #f29d38, #ffd08d);
+}
+.section-stack {
+  display: grid;
+  gap: 1rem;
+}
+.nested-card {
+  padding: 0.85rem;
+  border: 1px solid #e4ebf4;
+  border-radius: 0.85rem;
+  background: #f8fbff;
+}
+.nested-card h4 {
+  margin: 0 0 0.75rem;
+}
+.table-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.table-bar .track {
+  flex: 1;
+  min-width: 7rem;
 }
 .footer {
   margin-top: 1.5rem;
@@ -621,8 +646,19 @@ fn render_ingest_result(response: IngestResponse) -> impl IntoView {
 }
 
 fn render_analysis_result(response: AnalysisResponse) -> impl IntoView {
-    let data_quality_cards = response
-        .data_quality
+    let AnalysisResponse {
+        overlap_matrix,
+        concentration,
+        top_overlaps,
+        data_quality,
+        asset_allocation,
+        sector_exposure,
+        fee_analysis,
+        disclaimer,
+        timestamp,
+    } = response;
+
+    let data_quality_cards = data_quality
         .clone()
         .into_iter()
         .map(|entry| {
@@ -643,8 +679,7 @@ fn render_analysis_result(response: AnalysisResponse) -> impl IntoView {
         })
         .collect_view();
 
-    let overlap_rows = response
-        .top_overlaps
+    let overlap_rows = top_overlaps
         .into_iter()
         .map(|pair| {
             let shared = if pair.shared_tickers.is_empty() {
@@ -663,8 +698,10 @@ fn render_analysis_result(response: AnalysisResponse) -> impl IntoView {
         })
         .collect_view();
 
-    let concentration_rows = response
-        .concentration
+    let top_10_weight = concentration.top_10_weight;
+    let total_tickers = concentration.total_tickers;
+
+    let concentration_rows = concentration
         .top_holdings
         .into_iter()
         .map(|holding| {
@@ -677,21 +714,25 @@ fn render_analysis_result(response: AnalysisResponse) -> impl IntoView {
         })
         .collect_view();
 
+    let overlap_funds = overlap_matrix.funds;
+    let unweighted_overlap = overlap_matrix.unweighted;
+    let weighted_overlap = overlap_matrix.weighted;
+
     view! {
         <div class="meta">
-            <span class="pill">{format!("Timestamp: {}", response.timestamp)}</span>
-            <span class="pill">{format!("Top-10 concentration: {}", format_percent(response.concentration.top_10_weight))}</span>
-            <span class="pill">{format!("Total tickers: {}", response.concentration.total_tickers)}</span>
+            <span class="pill">{format!("Timestamp: {}", timestamp)}</span>
+            <span class="pill">{format!("Top-10 concentration: {}", format_percent(top_10_weight))}</span>
+            <span class="pill">{format!("Total tickers: {}", total_tickers)}</span>
         </div>
         <div class="grid cols-3">{data_quality_cards}</div>
         <div class="grid cols-2">
             <div class="card">
                 <h3>"Overlap matrix — unweighted"</h3>
-                <MatrixTable funds=response.overlap_matrix.funds.clone() values=response.overlap_matrix.unweighted />
+                <MatrixTable funds=overlap_funds.clone() values=unweighted_overlap />
             </div>
             <div class="card">
                 <h3>"Overlap matrix — weighted"</h3>
-                <MatrixTable funds=response.overlap_matrix.funds.clone() values=response.overlap_matrix.weighted />
+                <MatrixTable funds=overlap_funds values=weighted_overlap />
             </div>
             <div class="card">
                 <h3>"Portfolio concentration"</h3>
@@ -720,7 +761,104 @@ fn render_analysis_result(response: AnalysisResponse) -> impl IntoView {
                 </table>
             </div>
         </div>
-        <p class="muted">{response.disclaimer}</p>
+        <div class="grid cols-2">
+            <section class="card">
+                <h3>"Asset allocation"</h3>
+                <p class="muted">"Portfolio and per-fund asset class weights returned by the analysis endpoint."</p>
+                <AssetAllocationSection asset_allocation=asset_allocation />
+            </section>
+            <section class="card">
+                <h3>"Sector exposure"</h3>
+                <p class="muted">"Portfolio and per-fund sector mixes with relative exposure bars."</p>
+                <SectorExposureSection sector_exposure=sector_exposure />
+            </section>
+        </div>
+        <section class="card">
+            <h3>"Fee analysis"</h3>
+            <FeeAnalysisSection fee_analysis=fee_analysis />
+        </section>
+        <p class="muted">{disclaimer}</p>
+    }
+}
+
+#[component]
+fn AssetAllocationSection(asset_allocation: AssetAllocation) -> impl IntoView {
+    let portfolio_table = render_asset_allocation_table(asset_allocation.portfolio);
+    let per_fund_tables = render_asset_allocation_fund_cards(asset_allocation.per_fund);
+
+    view! {
+        <div class="section-stack">
+            <div>
+                <h4>"Portfolio"</h4>
+                {portfolio_table}
+            </div>
+            <div>
+                <h4>"Per fund"</h4>
+                {per_fund_tables}
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn SectorExposureSection(sector_exposure: SectorExposure) -> impl IntoView {
+    let portfolio_table = render_sector_exposure_table(sector_exposure.portfolio);
+    let per_fund_tables = render_sector_exposure_fund_cards(sector_exposure.per_fund);
+
+    view! {
+        <div class="section-stack">
+            <div>
+                <h4>"Portfolio"</h4>
+                {portfolio_table}
+            </div>
+            <div>
+                <h4>"Per fund"</h4>
+                {per_fund_tables}
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn FeeAnalysisSection(fee_analysis: FeeAnalysis) -> impl IntoView {
+    let weighted_er_raw = format!("{:.4}", fee_analysis.portfolio_weighted_er);
+    let fee_rows = if fee_analysis.per_fund.is_empty() {
+        view! { <tr><td colspan="3">"No fee data returned."</td></tr> }.into_any()
+    } else {
+        fee_analysis
+            .per_fund
+            .into_iter()
+            .map(|entry| {
+                view! {
+                    <tr>
+                        <td><strong>{entry.symbol}</strong></td>
+                        <td>{entry.expense_ratio_pct}</td>
+                        <td>{format!("{:.4}", entry.expense_ratio)}</td>
+                    </tr>
+                }
+            })
+            .collect_view()
+            .into_any()
+    };
+
+    view! {
+        <div class="section-stack">
+            <div class="meta">
+                <span class="pill">{format!("Portfolio-weighted ER: {}", fee_analysis.portfolio_weighted_er_pct)}</span>
+                <span class="pill">{format!("Raw ER: {weighted_er_raw}")}</span>
+                <span class="pill">{format!("Estimated annual cost per $10k: ${:.2}", fee_analysis.estimated_annual_cost_per_10k)}</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>"Fund"</th>
+                        <th>"Expense ratio"</th>
+                        <th>"Raw value"</th>
+                    </tr>
+                </thead>
+                <tbody>{fee_rows}</tbody>
+            </table>
+        </div>
     }
 }
 
@@ -746,6 +884,125 @@ fn render_recommendation_result(response: RecommendResponse) -> impl IntoView {
         </div>
         <div class="grid">{groups}</div>
         <p class="muted">{response.disclaimer}</p>
+    }
+}
+
+fn render_asset_allocation_table(entries: Vec<AssetAllocationEntry>) -> AnyView {
+    if entries.is_empty() {
+        view! { <div class="alert info">"No asset allocation data returned."</div> }.into_any()
+    } else {
+        let rows = entries
+            .into_iter()
+            .map(|entry| {
+                view! {
+                    <tr>
+                        <td>{entry.asset_class}</td>
+                        <td>{format_percent(entry.weight)}</td>
+                    </tr>
+                }
+            })
+            .collect_view();
+
+        view! {
+            <table>
+                <thead>
+                    <tr>
+                        <th>"Asset class"</th>
+                        <th>"Weight"</th>
+                    </tr>
+                </thead>
+                <tbody>{rows}</tbody>
+            </table>
+        }
+        .into_any()
+    }
+}
+
+fn render_asset_allocation_fund_cards(
+    per_fund: std::collections::BTreeMap<String, Vec<AssetAllocationEntry>>,
+) -> AnyView {
+    if per_fund.is_empty() {
+        view! { <div class="alert info">"No per-fund asset allocation data returned."</div> }
+            .into_any()
+    } else {
+        let cards = per_fund
+            .into_iter()
+            .map(|(symbol, entries)| {
+                let table = render_asset_allocation_table(entries);
+                view! {
+                    <div class="nested-card">
+                        <h4>{symbol}</h4>
+                        {table}
+                    </div>
+                }
+            })
+            .collect_view();
+
+        view! { <div class="grid cols-2">{cards}</div> }.into_any()
+    }
+}
+
+fn render_sector_exposure_table(entries: Vec<SectorExposureEntry>) -> AnyView {
+    if entries.is_empty() {
+        view! { <div class="alert info">"No sector exposure data returned."</div> }.into_any()
+    } else {
+        let rows = entries
+            .into_iter()
+            .map(|entry| {
+                let width = percentage(entry.weight, 1.0);
+                view! {
+                    <tr>
+                        <td>{entry.sector}</td>
+                        <td>{format_percent(entry.weight)}</td>
+                        <td>
+                            <div class="table-bar">
+                                <div class="track">
+                                    <div class="fill positive" style=format!("width: {width:.0}%;")></div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            })
+            .collect_view();
+
+        view! {
+            <table>
+                <thead>
+                    <tr>
+                        <th>"Sector"</th>
+                        <th>"Weight"</th>
+                        <th>"Exposure"</th>
+                    </tr>
+                </thead>
+                <tbody>{rows}</tbody>
+            </table>
+        }
+        .into_any()
+    }
+}
+
+fn render_sector_exposure_fund_cards(
+    per_fund: std::collections::BTreeMap<String, Vec<SectorExposureEntry>>,
+) -> AnyView {
+    if per_fund.is_empty() {
+        view! { <div class="alert info">"No per-fund sector exposure data returned."</div> }
+            .into_any()
+    } else {
+        let cards = per_fund
+            .into_iter()
+            .map(|(symbol, entries)| {
+                let table = render_sector_exposure_table(entries);
+                view! {
+                    <div class="nested-card">
+                        <h4>{symbol}</h4>
+                        {table}
+                    </div>
+                }
+            })
+            .collect_view();
+
+        view! { <div class="grid cols-2">{cards}</div> }.into_any()
     }
 }
 

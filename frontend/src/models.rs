@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Holding {
@@ -58,11 +59,53 @@ pub struct DataQualityEntry {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AssetAllocationEntry {
+    pub asset_class: String,
+    pub weight: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AssetAllocation {
+    pub portfolio: Vec<AssetAllocationEntry>,
+    pub per_fund: BTreeMap<String, Vec<AssetAllocationEntry>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SectorExposureEntry {
+    pub sector: String,
+    pub weight: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SectorExposure {
+    pub portfolio: Vec<SectorExposureEntry>,
+    pub per_fund: BTreeMap<String, Vec<SectorExposureEntry>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct FeeAnalysisEntry {
+    pub symbol: String,
+    pub expense_ratio: f64,
+    pub expense_ratio_pct: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct FeeAnalysis {
+    pub per_fund: Vec<FeeAnalysisEntry>,
+    pub portfolio_weighted_er: f64,
+    pub portfolio_weighted_er_pct: String,
+    pub estimated_annual_cost_per_10k: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AnalysisResponse {
     pub overlap_matrix: OverlapMatrix,
     pub concentration: ConcentrationResult,
     pub top_overlaps: Vec<OverlapPair>,
     pub data_quality: Vec<DataQualityEntry>,
+    pub asset_allocation: AssetAllocation,
+    pub sector_exposure: SectorExposure,
+    pub fee_analysis: FeeAnalysis,
     pub disclaimer: String,
     pub timestamp: String,
 }

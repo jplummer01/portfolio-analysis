@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 from src.data.stub_holdings import STUB_DATA_TIMESTAMPS, STUB_PERFORMANCE
+from src.tools.fees import get_expense_ratio
 from src.tools.normalise import NormalisedFund
 from src.tools.overlap import compute_overlap
 
@@ -93,6 +94,19 @@ def _compute_performance_score(symbol: str) -> float:
     return round(blended * 40.0, 2)
 
 
+def _compute_cost_penalty(symbol: str) -> float:
+    """Penalty 0 to -10 based on expense ratio.
+
+    Scale: 0% → 0 penalty, 1%+ → -10 penalty (linear).
+    """
+    er = get_expense_ratio(symbol)
+    if er is None:
+        return -5.0  # Unknown cost = moderate penalty
+    # Linear scale: 0 → 0, 0.01 (1%) → -10
+    penalty = min(10.0, er / 0.01 * 10.0)
+    return round(-penalty, 2)
+
+
 def _compute_data_quality_penalty(symbol: str) -> float:
     """Penalty 0 to -20 based on data staleness.
 
@@ -138,7 +152,7 @@ def score_candidates(
         overlap_score = _compute_overlap_reduction_score(existing, candidate)
         performance_score = _compute_performance_score(candidate.symbol)
         data_penalty = _compute_data_quality_penalty(candidate.symbol)
-        cost_penalty = 0.0  # Placeholder for future expense ratio data
+        cost_penalty = _compute_cost_penalty(candidate.symbol)
 
         breakdown = ScoreBreakdown(
             overlap_reduction=overlap_score,
@@ -160,6 +174,13 @@ def score_candidates(
         if data_penalty < 0:
             parts.append(
                 f"Data quality penalty: {data_penalty:.1f} (data may be stale)."
+            )
+
+        if cost_penalty < 0:
+            er = get_expense_ratio(candidate.symbol)
+            er_str = f"{er*100:.2f}%" if er is not None else "unknown"
+            parts.append(
+                f"Cost penalty: {cost_penalty:.1f} (expense ratio: {er_str})."
             )
 
         explanation = " ".join(parts)

@@ -1,0 +1,9 @@
+[project]
+name = "portfolio-analysis-backend"
+version = "0.1.0"
+description = "Fund Overlap & Switch Candidate Analyzer Backend"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

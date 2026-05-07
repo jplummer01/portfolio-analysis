@@ -15,6 +15,7 @@ The application is designed as a single-origin system: the browser communicates 
 1. **[Backend Architecture](backend.md)** — FastAPI server, API endpoints, deterministic tools (parsing, overlap, scoring, asset allocation, sector exposure, fees), Pydantic models, stub data, and testing
 2. **[Frontend Architecture](frontend.md)** — Rust/Leptos SSR application, Axum server, reverse proxy configuration, page descriptions (Ingest, Analyse, Recommend), and Rust models
 3. **[Multi-Agent Orchestration](multi-agent-orchestration.md)** — Microsoft Agent Framework (MAF) deep-dive: @workflow/@step decorators, analysis and recommendation pipelines, asyncio.gather parallelism, fallback strategy, and design decisions
+4. **[Agent Orchestration Architecture](agent-orchestration.md)** — MAF v1.0 orchestrator/sub-agent architecture, execution modes, shared service delegation, Foundry deployment assets, and testing guidance
 
 ## Quick Links
 

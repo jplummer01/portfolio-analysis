@@ -81,6 +81,40 @@ cargo run
 
 App available at: http://127.0.0.1:3000
 
+
+## Azure Deployment
+
+The project is being prepared for Azure Developer CLI (`azd`) deployment with:
+
+- **Frontend + backend** on Azure Container Apps
+- **Three hosted agents** on Microsoft Foundry Agent Service
+- **Single public origin** through the frontend Container App
+- **Bicep infrastructure** under `infra/`
+
+Quick path:
+
+```bash
+az login
+azd auth login
+azd ext install azure.ai.agents
+azd up
+```
+
+Prerequisites summary:
+
+- Azure subscription with deployment rights
+- `azd` `>= 1.24.0`
+- `azure.ai.agents` extension `>= 0.1.30-preview`
+- Azure CLI (`az`)
+
+Architecture overview:
+
+- `frontend` is the public Container App on port `3000`
+- `backend-api` is an internal Container App on port `8000`
+- `analysis-agent`, `candidate-agent`, and `recommendation-agent` run as Foundry hosted agents via the invocations protocol
+
+For the full deployment flow, environment variable reference, verification steps, and troubleshooting guidance, see [Documentation/azd-deployment.md](Documentation/azd-deployment.md).
+
 ## Environment Variables
 
 | Variable | Default | Description |

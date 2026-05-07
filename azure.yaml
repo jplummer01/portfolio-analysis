@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+# Minimum Azure Developer CLI and extension versions required for this app.
+requiredVersions:
+  azd: '>= 1.24.0'
+  extensions:
+    azure.ai.agents: '>= 0.1.30-preview'
+
+# Azure Developer CLI project name used for the deployment environment.
+name: portfolio-analysis
+
+# Infrastructure is defined with Bicep templates under the infra folder.
+infra:
+  provider: bicep
+  path: ./infra
+
+# Application and agent services deployed by azd.
+services:
+  # Public Rust/Leptos/Axum SSR frontend.
+  frontend:
+    project: ./frontend
+    host: containerapp
+    language: docker
+
+  # Python FastAPI backend API.
+  backend-api:
+    project: ./backend
+    host: containerapp
+    language: docker
+
+  # Foundry-hosted analysis agent.
+  analysis-agent:
+    project: ./agents/analysis
+    host: azure.ai.agent
+    language: docker
+    docker:
+      remoteBuild: true
+    config:
+      container:
+        resources:
+          cpu: "0.5"
+          memory: 1Gi
+      startupCommand: python main.py
+
+  # Foundry-hosted candidate analysis agent.
+  candidate-agent:
+    project: ./agents/candidate
+    host: azure.ai.agent
+    language: docker
+    docker:
+      remoteBuild: true
+    config:
+      container:
+        resources:
+          cpu: "0.5"
+          memory: 1Gi
+      startupCommand: python main.py
+
+  # Foundry-hosted recommendation agent.
+  recommendation-agent:
+    project: ./agents/recommendation
+    host: azure.ai.agent
+    language: docker
+    docker:
+      remoteBuild: true
+    config:
+      container:
+        resources:
+          cpu: "0.5"
+          memory: 1Gi
+      startupCommand: python main.py

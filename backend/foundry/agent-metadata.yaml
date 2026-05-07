@@ -1,0 +1,33 @@
+# Foundry Agent Service metadata
+name: portfolio-analysis-agents
+version: "0.1.0"
+description: "Portfolio overlap & fund switch candidate analyzer agents"
+
+agents:
+  - name: ExistingPortfolioAnalysisAgent
+    role: analysis
+    protocol: invocations
+    description: "Computes overlap, concentration, asset allocation, sector exposure, and fees for existing portfolio"
+
+  - name: CandidateUniverseAnalysisAgent
+    role: candidate
+    protocol: invocations
+    description: "Evaluates candidate funds for data quality and normalisation"
+
+  - name: RecommendationAgent
+    role: recommendation
+    protocol: invocations
+    description: "Scores and ranks candidate funds against existing portfolio"
+
+orchestrator:
+  name: PortfolioOrchestratorAgent
+  description: "Coordinates analysis and recommendation workflows using ConcurrentBuilder"
+  mode: agent_distributed
+  sub_agents:
+    - ExistingPortfolioAnalysisAgent
+    - CandidateUniverseAnalysisAgent
+    - RecommendationAgent
+
+environment:
+  EXECUTION_MODE: agent_distributed
+  FOUNDRY_PROJECT_ENDPOINT: "${AZURE_AI_PROJECT_ENDPOINT}"

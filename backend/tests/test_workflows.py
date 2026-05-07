@@ -6,6 +6,7 @@ from src.api.models.analysis import AnalyseRequest
 from src.api.models.recommendation import RecommendRequest
 from src.api.routes import analyse as analyse_route
 from src.api.routes import recommend as recommend_route
+from src.core.config import ExecutionMode, Settings
 from src.core.disclaimer import DISCLAIMER
 from src.tools.concentration import compute_concentration
 from src.tools.normalise import normalise_holdings
@@ -95,7 +96,11 @@ async def test_recommendation_workflow_execution():
 
 @pytest.mark.asyncio
 async def test_analyse_route_falls_back_when_workflow_fails(monkeypatch):
-    monkeypatch.setenv("USE_WORKFLOWS", "true")
+    monkeypatch.setattr(
+        analyse_route.settings,
+        "execution_mode",
+        ExecutionMode.WORKFLOW,
+    )
 
     async def fail_workflow(_request):
         raise RuntimeError("workflow unavailable")
@@ -114,7 +119,11 @@ async def test_analyse_route_falls_back_when_workflow_fails(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_recommend_route_falls_back_when_workflow_fails(monkeypatch):
-    monkeypatch.setenv("USE_WORKFLOWS", "true")
+    monkeypatch.setattr(
+        recommend_route.settings,
+        "execution_mode",
+        ExecutionMode.WORKFLOW,
+    )
 
     async def fail_workflow(_request):
         raise RuntimeError("workflow unavailable")
@@ -131,3 +140,35 @@ async def test_recommend_route_falls_back_when_workflow_fails(monkeypatch):
 
     assert list(response.recommendations) == ["SPY"]
     assert response.disclaimer == DISCLAIMER
+
+
+def test_settings_default_execution_mode(monkeypatch):
+    monkeypatch.delenv("EXECUTION_MODE", raising=False)
+    monkeypatch.delenv("USE_WORKFLOWS", raising=False)
+
+    settings = Settings()
+
+    assert settings.execution_mode == ExecutionMode.DIRECT
+    assert settings.is_direct is True
+    assert settings.is_workflow is False
+
+
+def test_settings_execution_mode_uses_explicit_env(monkeypatch):
+    monkeypatch.setenv("EXECUTION_MODE", "agent_local")
+    monkeypatch.setenv("USE_WORKFLOWS", "true")
+
+    settings = Settings()
+
+    assert settings.execution_mode == ExecutionMode.AGENT_LOCAL
+    assert settings.is_agent_local is True
+    assert settings.is_workflow is False
+
+
+def test_settings_execution_mode_uses_legacy_workflow_flag(monkeypatch):
+    monkeypatch.delenv("EXECUTION_MODE", raising=False)
+    monkeypatch.setenv("USE_WORKFLOWS", "true")
+
+    settings = Settings()
+
+    assert settings.execution_mode == ExecutionMode.WORKFLOW
+    assert settings.is_workflow is True

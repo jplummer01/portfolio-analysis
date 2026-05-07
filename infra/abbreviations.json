@@ -1,0 +1,8 @@
+{
+  "containerRegistryRegistries": "cr",
+  "operationalInsightsWorkspaces": "log-",
+  "insightsComponents": "appi-",
+  "cognitiveServicesAccounts": "ai-",
+  "appManagedEnvironments": "cae-",
+  "appContainerApps": "ca-"
+}

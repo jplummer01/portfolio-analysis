@@ -27,6 +27,9 @@ Single-origin design — the browser only talks to the frontend server. All `/ap
 
 - **Fund Ingestion** — Enter symbols manually, paste lists, or upload CSV/JSON files
 - **Overlap Analysis** — Unweighted and weighted overlap matrices, portfolio concentration
+- **Asset Allocation** — Equity / Fixed Income / Cash breakdown per fund and portfolio-wide
+- **Sector Exposure** — Morningstar-compatible sector analysis (Technology, Healthcare, Financials, etc.)
+- **Fee Analysis** — Per-fund expense ratios, portfolio-weighted average, estimated annual cost per $10k
 - **Candidate Recommendations** — Scored 0–100 with breakdown (overlap reduction, performance, data quality, cost)
 - **Data Quality** — Stale data detection (>90 days), freshness indicators
 - **MAF Workflows** — Optional Microsoft Agent Framework orchestration with `@workflow`/`@step`
@@ -139,12 +142,15 @@ cd backend
 python3 -m pytest tests/ -v
 ```
 
-77 tests covering:
+98 tests covering:
 - Parsing (symbols, paste, CSV, JSON)
 - Normalisation (weights, deduplication)
 - Overlap computation (unweighted, weighted, matrix)
 - Concentration (portfolio-level, allocations)
-- Scoring (all components, ranking)
+- Asset allocation (per-fund, portfolio-wide)
+- Sector exposure (weighted sectors, unknown tickers)
+- Fee analysis (expense ratios, portfolio cost)
+- Scoring (all components including cost penalty, ranking)
 - API integration (all endpoints)
 - MAF workflows (orchestration, fallback)
 
@@ -157,7 +163,7 @@ Candidates are scored 0–100:
 | Overlap Reduction | 0–50 | Lower overlap with existing fund = higher score |
 | Performance | 0–40 | Blended 1y/3y/5y returns |
 | Data Quality Penalty | 0 to -20 | Penalty for stale data (>90 days) |
-| Cost Penalty | 0 to -10 | Expense ratio (placeholder) |
+| Cost Penalty | 0 to -10 | Expense ratio (0% = no penalty, 1%+ = -10) |
 
 ## Project Structure
 
@@ -168,7 +174,7 @@ portfolio-analysis/
 │   │   ├── api/          # FastAPI app, routes, Pydantic models
 │   │   ├── core/         # Config, disclaimer
 │   │   ├── data/         # Stub holdings data
-│   │   ├── tools/        # Deterministic computation functions
+│   │   ├── tools/        # Deterministic tools (overlap, scoring, allocation, sectors, fees)
 │   │   └── workflows/    # MAF workflow orchestration
 │   ├── tests/            # pytest test suite
 │   └── requirements.txt

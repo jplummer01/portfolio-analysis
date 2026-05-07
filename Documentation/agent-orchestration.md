@@ -517,6 +517,109 @@ A practical validation order is:
 3. verify the proxy implementation maps backend requests to those payloads
 4. run end-to-end route tests through `agent_distributed`
 Because `RemoteAgentProxy.invoke(...)` is still a stub in this snapshot, fully remote route testing requires an environment or branch that provides the actual invocation transport.
+
+### 11.9 `azd up` hosted-agent layout and deployment path
+The `backend/foundry/` helper assets described above are the manual packaging bridge already present in the repository, but the preferred Azure deployment path is the `azd up` topology documented in [Azure Deployment Guide — `azd up`](azd-deployment.md).
+
+For the `azd` deployment shape, organize the hosted agents explicitly under an `agents/` folder so each runtime role has a dedicated manifest:
+
+```text
+agents/
+├── analysis/
+│   └── agent.yaml
+├── candidate/
+│   └── agent.yaml
+└── recommendation/
+    └── agent.yaml
+```
+
+That layout mirrors the runtime roles already defined in code:
+
+- `AnalysisExecutor` / `ExistingPortfolioAnalysisAgent`
+- `CandidateExecutor` / `CandidateUniverseAnalysisAgent`
+- `RecommendationExecutor` / `RecommendationAgent`
+
+A project-specific hosted-agent manifest should communicate five things clearly:
+
+1. the deployed agent name
+2. the role-specific startup contract
+3. the `invocations` protocol
+4. the runtime port expected by the hosted-agent surface
+5. environment values such as `AGENT_ROLE`, `EXECUTION_MODE`, and `FOUNDRY_PROJECT_ENDPOINT`
+
+A minimal project-oriented example, matching the current `agents/analysis/agent.yaml`, is:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/ContainerAgent.yaml
+kind: hosted
+name: analysis-agent
+protocols:
+  - protocol: invocations
+    version: "1.0.0"
+resources:
+  cpu: "0.5"
+  memory: 1Gi
+environment_variables:
+  - name: AGENT_ROLE
+    value: analysis
+tools: []
+```
+
+In the current `azure.yaml`, the service entry adds the runtime details around that manifest: `project: ./agents/analysis`, `host: azure.ai.agent`, `language: docker`, `docker.remoteBuild: true`, and `startupCommand: python main.py`. Equivalent candidate and recommendation manifests keep the same structure and change only the agent-specific identity and `AGENT_ROLE` value.
+
+#### Invocations protocol in this repository
+The distributed design here is not free-form conversational orchestration. It is request/response transport over deterministic JSON payloads.
+
+Representative payload contracts are already visible in `backend/src/agents/executors.py`:
+
+- analysis agent receives `{ "existing_funds": [...], "allocations": [...] }`
+- candidate agent receives `{ "candidate_funds": [...] }`
+- recommendation agent receives `{ "existing_normalised": [...], "candidate_normalised": [...] }`
+
+The current recommendation hosted agent also accepts raw symbol lists and normalizes them internally before it calls `RecommendationExecutor`, which is useful during migration but should not be treated as an invitation to let contracts drift casually. The hosted-agent manifests and backend transport still need to preserve structured JSON inputs and outputs rather than human-oriented chat prompts.
+
+#### How the backend talks to hosted agents in distributed mode
+When the backend Container App is configured with:
+
+```text
+EXECUTION_MODE=agent_distributed
+FOUNDRY_PROJECT_ENDPOINT=<project-endpoint>
+```
+
+`/api/analyse` and `/api/recommend` dispatch into `DistributedOrchestratorAgent`, which owns three remote proxies:
+
+- `RemoteAnalysisProxy`
+- `RemoteCandidateProxy`
+- `RemoteRecommendationProxy`
+
+The intended sequence is:
+
+1. FastAPI route validates the HTTP payload
+2. `DistributedOrchestratorAgent` selects the right remote proxy
+3. the proxy sends a JSON invocation to the hosted agent registered in Foundry
+4. the hosted agent runs the role-specific executor
+5. the backend wraps the returned dictionary into the public API response model
+6. the backend adds the disclaimer and timestamp before responding
+
+```mermaid
+sequenceDiagram
+    participant Frontend as Frontend Container App
+    participant Backend as Backend FastAPI
+    participant Orch as DistributedOrchestratorAgent
+    participant Proxy as RemoteAgentProxy
+    participant Agent as Foundry Hosted Agent
+    Frontend->>Backend: POST /api/analyse or /api/recommend
+    Backend->>Orch: run_analysis(...) / run_recommendation(...)
+    Orch->>Proxy: invoke(payload)
+    Proxy->>Agent: invocations protocol request
+    Agent-->>Proxy: deterministic JSON result
+    Proxy-->>Orch: result dictionary
+    Orch-->>Backend: API response payload
+    Backend-->>Frontend: JSON + disclaimer + timestamp
+```
+
+For the complete `azd` environment setup, provisioning flow, deployment sequence, verification commands, and troubleshooting steps, use [Azure Deployment Guide — `azd up`](azd-deployment.md) as the source of truth.
+
 ## 12. Shared service layer
 The service layer is the architectural anchor that prevents logic duplication.
 ### 12.1 `portfolio_analysis.py`

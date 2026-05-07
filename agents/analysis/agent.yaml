@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/ContainerAgent.yaml
+kind: hosted
+name: analysis-agent
+protocols:
+  - protocol: invocations
+    version: "1.0.0"
+resources:
+  cpu: "0.5"
+  memory: 1Gi
+environment_variables:
+  - name: AGENT_ROLE
+    value: analysis
+tools: []

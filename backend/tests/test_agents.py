@@ -1,6 +1,9 @@
 """Tests for MAF v1.0 agent orchestration module."""
 
+import asyncio
 import os
+import sys
+import types
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -198,8 +201,27 @@ class TestDistributedOrchestratorAgent:
                     "candidate_normalised": normalise_funds(["VTI", "QQQ"]),
                 }
             )
+            analysis_started = asyncio.Event()
+            candidate_started = asyncio.Event()
+            release_fanout = asyncio.Event()
 
-            async def fake_invoke(self, payload):
+            async def fake_analysis(self, payload):
+                assert payload == {"existing_funds": ["SPY"]}
+                analysis_started.set()
+                await candidate_started.wait()
+                await release_fanout.wait()
+                return {"data_quality": []}
+
+            async def fake_candidate(self, payload):
+                assert payload == {"candidate_funds": ["VTI", "QQQ"]}
+                candidate_started.set()
+                await analysis_started.wait()
+                await release_fanout.wait()
+                return {"normalised_candidates": normalise_funds(["VTI", "QQQ"])}
+
+            async def fake_recommendation(self, payload):
+                assert analysis_started.is_set()
+                assert candidate_started.is_set()
                 assert payload == {
                     "existing_funds": ["SPY"],
                     "candidate_funds": ["VTI", "QQQ"],
@@ -207,13 +229,29 @@ class TestDistributedOrchestratorAgent:
                 return expected
 
             monkeypatch.setattr(
+                distributed_module.RemoteAnalysisProxy,
+                "invoke",
+                fake_analysis,
+            )
+            monkeypatch.setattr(
+                distributed_module.RemoteCandidateProxy,
+                "invoke",
+                fake_candidate,
+            )
+            monkeypatch.setattr(
                 distributed_module.RemoteRecommendationProxy,
                 "invoke",
-                fake_invoke,
+                fake_recommendation,
             )
 
             orchestrator = distributed_module.DistributedOrchestratorAgent()
-            response = await orchestrator.run_recommendation(["SPY"], ["VTI", "QQQ"])
+            response_task = asyncio.create_task(
+                orchestrator.run_recommendation(["SPY"], ["VTI", "QQQ"])
+            )
+            await asyncio.wait_for(analysis_started.wait(), timeout=1.0)
+            await asyncio.wait_for(candidate_started.wait(), timeout=1.0)
+            release_fanout.set()
+            response = await response_task
 
             assert response.disclaimer is not None
             assert response.timestamp is not None
@@ -225,13 +263,86 @@ class TestDistributedOrchestratorAgent:
 
 
 class TestRemoteAgentProxy:
-    @pytest.mark.asyncio
-    async def test_invoke_raises_not_implemented(self):
+    def test_build_url(self):
         from src.agents.remote import RemoteAnalysisProxy
 
-        proxy = RemoteAnalysisProxy("http://example.com")
-        with pytest.raises(NotImplementedError, match="EXECUTION_MODE=agent_local"):
-            await proxy.invoke({})
+        proxy = RemoteAnalysisProxy("http://example.com/foundry/")
+
+        assert (
+            proxy._build_url()
+            == "http://example.com/foundry/agents/analysis-agent/endpoint/protocols/invocations"
+        )
+
+    @pytest.mark.asyncio
+    async def test_invoke_posts_payload(self, monkeypatch):
+        import src.agents.remote as remote_module
+
+        captured: dict[str, object] = {}
+
+        class FakeToken:
+            token = "token-value"
+
+        class FakeCredential:
+            async def get_token(self, scope):
+                captured["scope"] = scope
+                return FakeToken()
+
+            async def close(self):
+                captured["closed"] = True
+
+        azure_module = types.ModuleType("azure")
+        azure_module.__path__ = []
+        identity_module = types.ModuleType("azure.identity")
+        identity_module.__path__ = []
+        aio_module = types.ModuleType("azure.identity.aio")
+        aio_module.DefaultAzureCredential = FakeCredential
+        monkeypatch.setitem(sys.modules, "azure", azure_module)
+        monkeypatch.setitem(sys.modules, "azure.identity", identity_module)
+        monkeypatch.setitem(sys.modules, "azure.identity.aio", aio_module)
+
+        class FakeResponse:
+            def raise_for_status(self):
+                captured["status_checked"] = True
+
+            def json(self):
+                return {"ok": True}
+
+        class FakeAsyncClient:
+            def __init__(self, *, timeout):
+                captured["timeout"] = timeout
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, json, headers):
+                captured["url"] = url
+                captured["payload"] = json
+                captured["headers"] = headers
+                return FakeResponse()
+
+        monkeypatch.setattr(remote_module.httpx, "AsyncClient", FakeAsyncClient)
+
+        result = await remote_module.RemoteAnalysisProxy(
+            "http://example.com/foundry/"
+        ).invoke({"existing_funds": ["SPY"]})
+
+        assert captured["scope"] == "https://cognitiveservices.azure.com/.default"
+        assert captured["timeout"] == 60.0
+        assert (
+            captured["url"]
+            == "http://example.com/foundry/agents/analysis-agent/endpoint/protocols/invocations"
+        )
+        assert captured["payload"] == {"existing_funds": ["SPY"]}
+        assert captured["headers"] == {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer token-value",
+        }
+        assert captured["closed"] is True
+        assert captured["status_checked"] is True
+        assert result == {"ok": True}
 
     def test_proxy_names(self):
         from src.agents.remote import (
@@ -240,9 +351,9 @@ class TestRemoteAgentProxy:
             RemoteRecommendationProxy,
         )
 
-        assert RemoteAnalysisProxy("x").agent_name == "ExistingPortfolioAnalysisAgent"
-        assert RemoteCandidateProxy("x").agent_name == "CandidateUniverseAnalysisAgent"
-        assert RemoteRecommendationProxy("x").agent_name == "RecommendationAgent"
+        assert RemoteAnalysisProxy("x").agent_name == "analysis-agent"
+        assert RemoteCandidateProxy("x").agent_name == "candidate-agent"
+        assert RemoteRecommendationProxy("x").agent_name == "recommendation-agent"
 
 
 class TestAgentLocalRoutes:

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "${AZURE_ENV_NAME}" },
+    "location": { "value": "${AZURE_LOCATION}" },
+    "resourceGroupName": { "value": "${AZURE_RESOURCE_GROUP}" },
+    "principalId": { "value": "${AZURE_PRINCIPAL_ID}" },
+    "principalType": { "value": "${AZURE_PRINCIPAL_TYPE}" },
+    "aiFoundryResourceName": { "value": "${AZURE_AI_ACCOUNT_NAME}" },
+    "aiFoundryProjectName": { "value": "${AZURE_AI_PROJECT_NAME}" },
+    "aiProjectDeploymentsJson": { "value": "${AI_PROJECT_DEPLOYMENTS=[]}" },
+    "aiProjectConnectionsJson": { "value": "${AI_PROJECT_CONNECTIONS=[]}" },
+    "aiProjectConnectionCredentialsJson": { "value": "${AI_PROJECT_CONNECTION_CREDENTIALS}" },
+    "aiProjectDependentResourcesJson": { "value": "${AI_PROJECT_DEPENDENT_RESOURCES=[]}" },
+    "enableHostedAgents": { "value": "${ENABLE_HOSTED_AGENTS=true}" },
+    "enableCapabilityHost": { "value": "${ENABLE_CAPABILITY_HOST=true}" },
+    "enableMonitoring": { "value": "${ENABLE_MONITORING=true}" },
+    "useExistingAiProject": { "value": "${USE_EXISTING_AI_PROJECT=false}" },
+    "backendImageName": { "value": "${SERVICE_BACKEND_API_IMAGE_NAME=}" },
+    "frontendImageName": { "value": "${SERVICE_FRONTEND_IMAGE_NAME=}" },
+    "existingContainerRegistryResourceId": { "value": "${AZURE_CONTAINER_REGISTRY_RESOURCE_ID=}" },
+    "existingContainerRegistryEndpoint": { "value": "${AZURE_CONTAINER_REGISTRY_ENDPOINT=}" },
+    "existingAcrConnectionName": { "value": "${AZURE_AI_PROJECT_ACR_CONNECTION_NAME=}" },
+    "existingApplicationInsightsConnectionString": { "value": "${APPLICATIONINSIGHTS_CONNECTION_STRING=}" },
+    "existingApplicationInsightsResourceId": { "value": "${APPLICATIONINSIGHTS_RESOURCE_ID=}" },
+    "existingAppInsightsConnectionName": { "value": "${APPLICATIONINSIGHTS_CONNECTION_NAME=}" }
+  }
+}

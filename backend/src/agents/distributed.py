@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -58,7 +59,18 @@ class DistributedOrchestratorAgent:
         existing_funds: list[str],
         candidate_funds: list[str],
     ) -> RecommendResponse:
-        """Run recommendation by invoking remote analysis + candidate + recommendation agents."""
+        """Run recommendation with concurrent fan-out and sequential scoring."""
+        analysis_result, candidate_result = await asyncio.gather(
+            self.analysis_proxy.invoke({"existing_funds": existing_funds}),
+            self.candidate_proxy.invoke({"candidate_funds": candidate_funds}),
+        )
+
+        logger.debug(
+            "Remote pre-processing complete for %d existing funds and %d candidates",
+            len(analysis_result.get("data_quality", [])),
+            len(candidate_result.get("normalised_candidates", [])),
+        )
+
         result = await self.recommendation_proxy.invoke(
             {"existing_funds": existing_funds, "candidate_funds": candidate_funds}
         )

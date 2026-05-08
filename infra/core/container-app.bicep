@@ -24,7 +24,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: !empty(imageName) ? targetPort : 80
         transport: 'auto'
       }
-      registries: !empty(containerRegistryServer) && !empty(imageName) ? [
+      registries: !empty(containerRegistryServer) ? [
         {
           server: containerRegistryServer
           identity: 'system'

@@ -163,6 +163,19 @@ module backendApi './core/container-app.bicep' = {
   }
 }
 
+// Grant the backend managed identity Azure AI User role on the Foundry project
+// so it can invoke hosted agents via the invocations protocol
+module backendAiUserRole './core/ai-foundry-role-assignment.bicep' = if (!useExistingAiProject) {
+  name: 'backend-ai-user-role'
+  scope: rg
+  params: {
+    aiAccountName: aiFoundry.outputs.accountName
+    aiProjectName: aiFoundry.outputs.projectName
+    principalId: backendApi.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 var frontendEnv = concat([
   {
     name: 'FRONTEND_HOST'

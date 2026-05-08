@@ -31,19 +31,31 @@ async def analyse(request: AnalyseRequest) -> AnalysisResponse:
             )
 
     elif mode == ExecutionMode.AGENT_LOCAL:
-        from src.agents.orchestrator import PortfolioOrchestratorAgent
+        try:
+            from src.agents.orchestrator import PortfolioOrchestratorAgent
 
-        orchestrator = PortfolioOrchestratorAgent()
-        return await orchestrator.run_analysis(
-            request.existing_funds, request.allocations,
-        )
+            orchestrator = PortfolioOrchestratorAgent()
+            return await orchestrator.run_analysis(
+                request.existing_funds, request.allocations,
+            )
+        except Exception as exc:
+            logger.warning(
+                'Local agent analysis failed; falling back to direct tools: %s',
+                exc,
+            )
 
     elif mode == ExecutionMode.AGENT_DISTRIBUTED:
-        from src.agents.distributed import DistributedOrchestratorAgent
+        try:
+            from src.agents.distributed import DistributedOrchestratorAgent
 
-        orchestrator = DistributedOrchestratorAgent()
-        return await orchestrator.run_analysis(
-            request.existing_funds, request.allocations,
-        )
+            orchestrator = DistributedOrchestratorAgent()
+            return await orchestrator.run_analysis(
+                request.existing_funds, request.allocations,
+            )
+        except Exception as exc:
+            logger.warning(
+                'Distributed agent analysis failed; falling back to direct tools: %s',
+                exc,
+            )
 
     return await analyse_portfolio(request.existing_funds, request.allocations)

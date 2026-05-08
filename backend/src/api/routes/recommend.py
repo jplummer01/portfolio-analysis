@@ -39,19 +39,31 @@ async def recommend(request: RecommendRequest) -> RecommendResponse:
             )
 
     elif mode == ExecutionMode.AGENT_LOCAL:
-        from src.agents.orchestrator import PortfolioOrchestratorAgent
+        try:
+            from src.agents.orchestrator import PortfolioOrchestratorAgent
 
-        orchestrator = PortfolioOrchestratorAgent()
-        return await orchestrator.run_recommendation(
-            request.existing_funds, request.candidate_funds,
-        )
+            orchestrator = PortfolioOrchestratorAgent()
+            return await orchestrator.run_recommendation(
+                request.existing_funds, request.candidate_funds,
+            )
+        except Exception as exc:
+            logger.warning(
+                'Local agent recommendation failed; falling back to direct tools: %s',
+                exc,
+            )
 
     elif mode == ExecutionMode.AGENT_DISTRIBUTED:
-        from src.agents.distributed import DistributedOrchestratorAgent
+        try:
+            from src.agents.distributed import DistributedOrchestratorAgent
 
-        orchestrator = DistributedOrchestratorAgent()
-        return await orchestrator.run_recommendation(
-            request.existing_funds, request.candidate_funds,
-        )
+            orchestrator = DistributedOrchestratorAgent()
+            return await orchestrator.run_recommendation(
+                request.existing_funds, request.candidate_funds,
+            )
+        except Exception as exc:
+            logger.warning(
+                'Distributed agent recommendation failed; falling back to direct tools: %s',
+                exc,
+            )
 
     return await recommend_candidates(request.existing_funds, request.candidate_funds)

@@ -18,6 +18,12 @@ The application is designed as a single-origin system: the browser communicates 
 4. **[Agent Orchestration Architecture](agent-orchestration.md)** — MAF v1.0 orchestrator/sub-agent architecture, execution modes, shared service delegation, Foundry deployment assets, and testing guidance
 5. **[Azure Deployment Guide — `azd up`](azd-deployment.md)** — Azure Container Apps + Microsoft Foundry hosted-agent deployment, environment variables, provisioning flow, verification steps, monitoring, troubleshooting, cleanup, and cost notes
 
+### Hosted Agent Reference
+
+6. **[Analysis Agent](analysis-agent.md)** — Existing portfolio analysis agent: overlap matrices, concentration, data quality, asset allocation, sector exposure, and fee analysis
+7. **[Candidate Agent](candidate-agent.md)** — Candidate universe evaluation agent: holdings normalisation and data quality checks
+8. **[Recommendation Agent](recommendation-agent.md)** — Deterministic candidate scoring agent: 0–100 composite scoring with overlap reduction, performance, data quality, and cost components
+
 ## Quick Links
 
 - Getting started → see [README.md](../README.md)

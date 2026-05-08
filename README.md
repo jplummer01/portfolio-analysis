@@ -87,7 +87,7 @@ App available at: http://127.0.0.1:3000
 The project is being prepared for Azure Developer CLI (`azd`) deployment with:
 
 - **Frontend + backend** on Azure Container Apps
-- **Three hosted agents** on Microsoft Foundry Agent Service
+- **Three hosted agents** on Microsoft Foundry Agent Service — see [Hosted Agent Documentation](#hosted-agent-documentation)
 - **Single public origin** through the frontend Container App
 - **Bicep infrastructure** under `infra/`
 
@@ -114,6 +114,16 @@ Architecture overview:
 - `analysis-agent`, `candidate-agent`, and `recommendation-agent` run as Foundry hosted agents via the invocations protocol
 
 For the full deployment flow, environment variable reference, verification steps, and troubleshooting guidance, see [Documentation/azd-deployment.md](Documentation/azd-deployment.md).
+
+### Hosted Agent Documentation
+
+Each hosted agent has its own documentation describing configuration, input/output contracts, executor logic, and deployment details:
+
+| Agent | Description | Documentation |
+|-------|-------------|---------------|
+| `analysis-agent` | Existing portfolio analysis (overlap, concentration, asset allocation, sector exposure, fees) | [Documentation/analysis-agent.md](Documentation/analysis-agent.md) |
+| `candidate-agent` | Candidate universe evaluation (holdings normalisation, data quality) | [Documentation/candidate-agent.md](Documentation/candidate-agent.md) |
+| `recommendation-agent` | Deterministic candidate scoring and ranking (0–100 composite score) | [Documentation/recommendation-agent.md](Documentation/recommendation-agent.md) |
 
 ## Environment Variables
 

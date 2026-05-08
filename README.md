@@ -4,94 +4,26 @@ A web application that analyzes mutual fund/ETF portfolio overlap and recommends
 
 > **For informational purposes only; not financial advice.**
 
-## Architecture
+**In this quickstart, you:**
 
-```
-┌─────────────────────────────────────────────┐
-│  Browser → http://127.0.0.1:3000            │
-├─────────────────────────────────────────────┤
-│  Frontend (Rust / Leptos SSR / Axum)        │
-│  - Serves HTML pages                        │
-│  - Proxies /api/* → Backend                 │
-├─────────────────────────────────────────────┤
-│  Backend (Python / FastAPI / MAF)           │
-│  - Deterministic tools (overlap, scoring)   │
-│  - Agent Framework workflows (optional)     │
-│  - Stub holdings data                       │
-└─────────────────────────────────────────────┘
-```
-
-Single-origin design — the browser only talks to the frontend server. All `/api/*` requests are reverse-proxied to the backend.
-
-## Features
-
-- **Fund Ingestion** — Enter symbols manually, paste lists, or upload CSV/JSON files
-- **Overlap Analysis** — Unweighted and weighted overlap matrices, portfolio concentration
-- **Asset Allocation** — Equity / Fixed Income / Cash breakdown per fund and portfolio-wide
-- **Sector Exposure** — Morningstar-compatible sector analysis (Technology, Healthcare, Financials, etc.)
-- **Fee Analysis** — Per-fund expense ratios, portfolio-weighted average, estimated annual cost per $10k
-- **Candidate Recommendations** — Scored 0–100 with breakdown (overlap reduction, performance, data quality, cost)
-- **Data Quality** — Stale data detection (>90 days), freshness indicators
-- **MAF Workflows** — Optional Microsoft Agent Framework orchestration with `@workflow`/`@step`
+- Deploy the application to Azure (Container Apps + Foundry hosted agents)
+- Analyse portfolio overlap and concentration
+- Score switch candidates with explainable breakdowns
+- Interact with the web UI or call the API directly
 
 ## Prerequisites
 
-- **Python 3.11+** (tested with 3.14)
-- **Rust** (stable toolchain, for the frontend)
-- **pip** (Python package manager)
+Before you begin, you need:
 
-## Quick Start
+- An [Azure subscription](https://azure.microsoft.com/pricing/purchase-options/azure-account) with Contributor access
+- [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) (`azd`) version 1.24.0 or later
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`)
+- [Python 3.11+](https://www.python.org/downloads/) (tested with 3.14)
+- [Rust](https://rustup.rs/) (stable toolchain, for the frontend)
 
-### 1. Start the Backend
+## Step 1: Deploy to Azure
 
-```bash
-cd backend
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set environment variables (or use defaults)
-export BACKEND_HOST=127.0.0.1
-export BACKEND_PORT=8000
-export LOG_LEVEL=INFO
-export DATA_DIR=./data
-
-# Optional: enable MAF workflow orchestration
-# export USE_WORKFLOWS=true
-
-# Run the server
-python3 -m uvicorn src.api.main:app --host ${BACKEND_HOST} --port ${BACKEND_PORT} --reload
-```
-
-Backend API available at: http://127.0.0.1:8000/api/health
-
-### 2. Start the Frontend
-
-```bash
-cd frontend
-
-# Set environment variables (or use defaults)
-export FRONTEND_HOST=127.0.0.1
-export FRONTEND_PORT=3000
-export BACKEND_BASE_URL=http://127.0.0.1:8000
-
-# Build and run
-cargo run
-```
-
-App available at: http://127.0.0.1:3000
-
-
-## Azure Deployment
-
-The project is being prepared for Azure Developer CLI (`azd`) deployment with:
-
-- **Frontend + backend** on Azure Container Apps
-- **Three hosted agents** on Microsoft Foundry Agent Service — see [Hosted Agent Documentation](#hosted-agent-documentation)
-- **Single public origin** through the frontend Container App
-- **Bicep infrastructure** under `infra/`
-
-Quick path:
+Install the `ai agent` extension and deploy all services in one command:
 
 ```bash
 az login
@@ -100,135 +32,134 @@ azd ext install azure.ai.agents
 azd up
 ```
 
-Prerequisites summary:
+This provisions:
 
-- Azure subscription with deployment rights
-- `azd` `>= 1.24.0`
-- `azure.ai.agents` extension `>= 0.1.30-preview`
-- Azure CLI (`az`)
+| Resource | Purpose |
+|----------|---------|
+| Frontend Container App | Public entrypoint (Rust/Leptos SSR on port 3000) |
+| Backend Container App | Internal API (Python/FastAPI on port 8000) |
+| Analysis Agent | Overlap, concentration, asset allocation, sectors, fees |
+| Candidate Agent | Candidate universe normalisation and data quality |
+| Recommendation Agent | Deterministic scoring (0–100) with explanations |
+| Azure Container Registry | Container images |
+| AI Foundry Project | Hosted agent runtime |
 
-Architecture overview:
+> **Tip:** Run `azd down` when finished to delete resources and stop incurring charges.
 
-- `frontend` is the public Container App on port `3000`
-- `backend-api` is an internal Container App on port `8000`
-- `analysis-agent`, `candidate-agent`, and `recommendation-agent` run as Foundry hosted agents via the invocations protocol
+## Step 2: Verify the deployment
 
-For the full deployment flow, environment variable reference, verification steps, and troubleshooting guidance, see [Documentation/azd-deployment.md](Documentation/azd-deployment.md).
-
-### Hosted Agent Documentation
-
-Each hosted agent has its own documentation describing configuration, input/output contracts, executor logic, and deployment details:
-
-| Agent | Description | Documentation |
-|-------|-------------|---------------|
-| `analysis-agent` | Existing portfolio analysis (overlap, concentration, asset allocation, sector exposure, fees) | [Documentation/analysis-agent.md](Documentation/analysis-agent.md) |
-| `candidate-agent` | Candidate universe evaluation (holdings normalisation, data quality) | [Documentation/candidate-agent.md](Documentation/candidate-agent.md) |
-| `recommendation-agent` | Deterministic candidate scoring and ranking (0–100 composite score) | [Documentation/recommendation-agent.md](Documentation/recommendation-agent.md) |
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BACKEND_HOST` | 127.0.0.1 | Backend listen address |
-| `BACKEND_PORT` | 8000 | Backend listen port |
-| `LOG_LEVEL` | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |
-| `DATA_DIR` | ./data | Data directory path |
-| `USE_WORKFLOWS` | false | Enable MAF workflow orchestration |
-| `FRONTEND_HOST` | 127.0.0.1 | Frontend listen address |
-| `FRONTEND_PORT` | 3000 | Frontend listen port |
-| `BACKEND_BASE_URL` | http://127.0.0.1:8000 | Backend URL for reverse proxy |
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | Health check |
-| POST | `/api/ingest/symbols` | Ingest funds by symbol |
-| POST | `/api/ingest/paste` | Ingest from pasted text |
-| POST | `/api/ingest/upload` | Ingest from CSV/JSON file |
-| POST | `/api/analyse` | Overlap + concentration analysis |
-| POST | `/api/recommend` | Candidate scoring + recommendations |
-
-### Example: Analyse Overlap
+After `azd up` completes, check that the frontend is responding:
 
 ```bash
-curl -X POST http://127.0.0.1:3000/api/analyse \
+curl https://<your-frontend-url>/api/health
+```
+
+You should see:
+
+```json
+{"status": "healthy"}
+```
+
+Open the frontend URL in your browser to access the web UI.
+
+## Step 3: Use the application
+
+The web UI has three tabs:
+
+### Ingest — Add fund symbols
+
+Enter fund symbols to load holdings data.
+
+Available stub funds: `SPY`, `QQQ`, `VTI`, `ARKK`, `SCHD`, `VUG`, `VXUS`
+
+### Analyse — Inspect portfolio overlap
+
+Enter existing funds and click **Analyse portfolio** to see:
+- Overlap matrices (unweighted + weighted)
+- Portfolio concentration
+- Asset allocation and sector exposure
+- Fee analysis and data quality
+
+```bash
+curl -X POST https://<your-frontend-url>/api/analyse \
   -H "Content-Type: application/json" \
   -d '{"existing_funds": ["SPY", "QQQ", "VTI"]}'
 ```
 
-### Example: Get Recommendations
+### Recommend — Score switch candidates
+
+Enter existing funds and candidates, then click **Score candidates** to see:
+- Ranked candidates per fund (scored 0–100)
+- Component-level breakdowns
+- Human-readable explanations
+- Data quality penalties
 
 ```bash
-curl -X POST http://127.0.0.1:3000/api/recommend \
+curl -X POST https://<your-frontend-url>/api/recommend \
   -H "Content-Type: application/json" \
   -d '{"existing_funds": ["SPY"], "candidate_funds": ["ARKK", "SCHD", "VXUS"]}'
 ```
 
-## Available Stub Funds
+## Run locally (development)
 
-| Symbol | Description | Overlap Profile |
-|--------|-------------|-----------------|
-| SPY | S&P 500 ETF | Broad US large-cap |
-| QQQ | Nasdaq 100 | Heavy tech, high overlap with SPY |
-| VTI | Total US Market | Moderate overlap with SPY |
-| ARKK | ARK Innovation | Low overlap, high-growth |
-| SCHD | Schwab Dividend | Low overlap, dividend-focused |
-| VUG | Vanguard Growth | Moderate overlap with QQQ |
-| VXUS | International | Minimal US overlap (stale data) |
+### Start the backend
 
-## Running Tests
+```bash
+cd backend
+pip install -r requirements.txt
+python3 -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --reload
+```
 
-### Backend
+### Start the frontend
+
+```bash
+cd frontend
+export BACKEND_BASE_URL=http://127.0.0.1:8000
+cargo run
+```
+
+App available at: http://127.0.0.1:3000
+
+### Run tests
 
 ```bash
 cd backend
 python3 -m pytest tests/ -v
 ```
 
-98 tests covering:
-- Parsing (symbols, paste, CSV, JSON)
-- Normalisation (weights, deduplication)
-- Overlap computation (unweighted, weighted, matrix)
-- Concentration (portfolio-level, allocations)
-- Asset allocation (per-fund, portfolio-wide)
-- Sector exposure (weighted sectors, unknown tickers)
-- Fee analysis (expense ratios, portfolio cost)
-- Scoring (all components including cost penalty, ranking)
-- API integration (all endpoints)
-- MAF workflows (orchestration, fallback)
-
-## Scoring Algorithm
-
-Candidates are scored 0–100:
-
-| Component | Range | Description |
-|-----------|-------|-------------|
-| Overlap Reduction | 0–50 | Lower overlap with existing fund = higher score |
-| Performance | 0–40 | Blended 1y/3y/5y returns |
-| Data Quality Penalty | 0 to -20 | Penalty for stale data (>90 days) |
-| Cost Penalty | 0 to -10 | Expense ratio (0% = no penalty, 1%+ = -10) |
-
-## Project Structure
+## Architecture
 
 ```
-portfolio-analysis/
-├── backend/
-│   ├── src/
-│   │   ├── api/          # FastAPI app, routes, Pydantic models
-│   │   ├── core/         # Config, disclaimer
-│   │   ├── data/         # Stub holdings data
-│   │   ├── tools/        # Deterministic tools (overlap, scoring, allocation, sectors, fees)
-│   │   └── workflows/    # MAF workflow orchestration
-│   ├── tests/            # pytest test suite
-│   └── requirements.txt
-├── frontend/
-│   ├── src/              # Rust/Leptos/Axum application
-│   └── Cargo.toml
-├── AGENTS.md             # System configuration spec
-└── README.md
+Browser → Frontend (Axum :3000) → /api/* proxy → Backend (FastAPI :8000)
+                                                       ↓
+                                           Foundry Hosted Agents
+                                    (analysis / candidate / recommendation)
+```
+
+Single-origin design — the browser only talks to the frontend. All `/api/*` requests are reverse-proxied to the backend, which can optionally delegate to Foundry hosted agents.
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Backend Architecture](Documentation/backend.md) | FastAPI server, API endpoints, deterministic tools, Pydantic models |
+| [Frontend Architecture](Documentation/frontend.md) | Rust/Leptos SSR, Axum server, reverse proxy, page descriptions |
+| [Multi-Agent Orchestration](Documentation/multi-agent-orchestration.md) | MAF @workflow/@step, analysis pipelines, fallback strategy |
+| [Agent Orchestration Architecture](Documentation/agent-orchestration.md) | Orchestrator/sub-agent pattern, execution modes, shared services |
+| [Azure Deployment Guide](Documentation/azd-deployment.md) | Full deployment flow, environment variables, troubleshooting |
+| [Analysis Agent](Documentation/analysis-agent.md) | Overlap, concentration, asset allocation, sector exposure, fees |
+| [Candidate Agent](Documentation/candidate-agent.md) | Holdings normalisation and data quality checks |
+| [Recommendation Agent](Documentation/recommendation-agent.md) | 0–100 scoring with component breakdowns |
+
+## Clean up resources
+
+To delete all deployed resources:
+
+```bash
+azd down
 ```
 
 ## License
 
 This project is for demonstration purposes.
+

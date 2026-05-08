@@ -21,10 +21,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
       activeRevisionsMode: 'Single'
       ingress: {
         external: external
-        targetPort: targetPort
+        targetPort: !empty(imageName) ? targetPort : 80
         transport: 'auto'
       }
-      registries: !empty(containerRegistryServer) ? [
+      registries: !empty(containerRegistryServer) && !empty(imageName) ? [
         {
           server: containerRegistryServer
           identity: 'system'

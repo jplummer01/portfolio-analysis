@@ -6,10 +6,10 @@ A web application that analyzes mutual fund/ETF portfolio overlap and recommends
 
 **In this quickstart, you:**
 
-- Deploy the application to Azure (Container Apps + Foundry hosted agents)
-- Analyse portfolio overlap and concentration
-- Score switch candidates with explainable breakdowns
-- Interact with the web UI or call the API directly
+- Set up the project and install dependencies
+- Test the application locally
+- Deploy to Azure (Container Apps + Foundry hosted agents)
+- Verify your deployment and interact with the app
 
 ## Prerequisites
 
@@ -21,9 +21,68 @@ Before you begin, you need:
 - [Python 3.11+](https://www.python.org/downloads/) (tested with 3.14)
 - [Rust](https://rustup.rs/) (stable toolchain, for the frontend)
 
-## Step 1: Deploy to Azure
+## Step 1: Set up the project
 
-Install the `ai agent` extension and deploy all services in one command:
+Clone the repository and install backend dependencies:
+
+```bash
+git clone https://github.com/your-org/portfolio-analysis.git
+cd portfolio-analysis/backend
+pip install -r requirements.txt
+```
+
+## Step 2: Test locally
+
+Before deploying, verify the application works on your machine.
+
+### Start the backend
+
+```bash
+cd backend
+python3 -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+### Start the frontend (separate terminal)
+
+```bash
+cd frontend
+export BACKEND_BASE_URL=http://127.0.0.1:8000
+cargo run
+```
+
+App available at: http://127.0.0.1:3000
+
+### Verify locally
+
+```bash
+# Health check
+curl http://127.0.0.1:3000/api/health
+
+# Analyse portfolio overlap
+curl -X POST http://127.0.0.1:3000/api/analyse \
+  -H "Content-Type: application/json" \
+  -d '{"existing_funds": ["SPY", "QQQ", "VTI"]}'
+
+# Score switch candidates
+curl -X POST http://127.0.0.1:3000/api/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"existing_funds": ["SPY"], "candidate_funds": ["ARKK", "SCHD", "VXUS"]}'
+```
+
+You can also open http://127.0.0.1:3000 in your browser and use the web UI to **Ingest**, **Analyse**, and **Recommend**.
+
+Available stub funds: `SPY`, `QQQ`, `VTI`, `ARKK`, `SCHD`, `VUG`, `VXUS`
+
+### Run tests
+
+```bash
+cd backend
+python3 -m pytest tests/ -v
+```
+
+## Step 3: Deploy to Azure
+
+Install the `ai agent` extension and deploy all services:
 
 ```bash
 az login
@@ -46,7 +105,7 @@ This provisions:
 
 > **Tip:** Run `azd down` when finished to delete resources and stop incurring charges.
 
-## Step 2: Verify the deployment
+## Step 4: Verify the deployment
 
 After `azd up` completes, check that the frontend is responding:
 
@@ -60,71 +119,24 @@ You should see:
 {"status": "healthy"}
 ```
 
-Open the frontend URL in your browser to access the web UI.
+Open the frontend URL in your browser. The web UI has three tabs:
 
-## Step 3: Use the application
+| Tab | Action | What you see |
+|-----|--------|--------------|
+| **Ingest** | Enter fund symbols | Holdings loaded from stub data |
+| **Analyse** | Click "Analyse portfolio" | Overlap matrices, concentration, asset allocation, sectors, fees |
+| **Recommend** | Click "Score candidates" | Ranked candidates (0–100), breakdowns, explanations |
 
-The web UI has three tabs:
-
-### Ingest — Add fund symbols
-
-Enter fund symbols to load holdings data.
-
-Available stub funds: `SPY`, `QQQ`, `VTI`, `ARKK`, `SCHD`, `VUG`, `VXUS`
-
-### Analyse — Inspect portfolio overlap
-
-Enter existing funds and click **Analyse portfolio** to see:
-- Overlap matrices (unweighted + weighted)
-- Portfolio concentration
-- Asset allocation and sector exposure
-- Fee analysis and data quality
+Test the API directly against the deployed app:
 
 ```bash
 curl -X POST https://<your-frontend-url>/api/analyse \
   -H "Content-Type: application/json" \
   -d '{"existing_funds": ["SPY", "QQQ", "VTI"]}'
-```
 
-### Recommend — Score switch candidates
-
-Enter existing funds and candidates, then click **Score candidates** to see:
-- Ranked candidates per fund (scored 0–100)
-- Component-level breakdowns
-- Human-readable explanations
-- Data quality penalties
-
-```bash
 curl -X POST https://<your-frontend-url>/api/recommend \
   -H "Content-Type: application/json" \
   -d '{"existing_funds": ["SPY"], "candidate_funds": ["ARKK", "SCHD", "VXUS"]}'
-```
-
-## Run locally (development)
-
-### Start the backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-python3 -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-### Start the frontend
-
-```bash
-cd frontend
-export BACKEND_BASE_URL=http://127.0.0.1:8000
-cargo run
-```
-
-App available at: http://127.0.0.1:3000
-
-### Run tests
-
-```bash
-cd backend
-python3 -m pytest tests/ -v
 ```
 
 ## Architecture

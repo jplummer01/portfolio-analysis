@@ -71,11 +71,12 @@ You need an active Azure subscription, permission to create or update resources,
 | Tool | Minimum version | Why it is needed |
 |---|---|---|
 | Azure Developer CLI (`azd`) | `1.24.0` | project initialization, provisioning, deployment, environment management |
-| `azure.ai.agents` azd extension | `0.1.30-preview` | hosted-agent commands and deployment support |
+| `azure.ai.agents` azd extension | `0.1.31-preview` | hosted-agent commands and deployment support |
 | Azure CLI (`az`) | current stable | subscription selection, diagnostics, Container Apps inspection |
-| Docker or compatible builder | current stable | local container builds before push to ACR |
 | Rust | stable | local frontend validation |
 | `python3.14` | `3.14` | local backend validation and smoke tests |
+
+> **Note:** Docker/Podman is **not required**. All services use `remoteBuild: true`, meaning container images are built in Azure (ACR Tasks for agents, Container Apps Build for apps). No local container runtime is needed.
 ### 3.3 Install and verify the toolchain
 Install or update `azd`, then verify it:
 ```bash
@@ -160,7 +161,9 @@ azd env set AZURE_AI_ACCOUNT_NAME <ai-account-name>
 azd env set AZURE_AI_PROJECT_NAME <foundry-project-name>
 azd env set AZURE_PRINCIPAL_ID <principal-id>
 azd env set AZURE_PRINCIPAL_TYPE User
+azd env set AZURE_TENANT_ID <tenant-id>
 ```
+> **Important:** `AZURE_TENANT_ID` is required by the `azure.ai.agents` extension's postdeploy hook. Set it from your current login: `azd env set AZURE_TENANT_ID "$(az account show --query tenantId -o tsv)"`
 #### Frontend runtime inputs
 ```bash
 azd env set FRONTEND_HOST 0.0.0.0
@@ -261,6 +264,7 @@ The table below consolidates the Azure, IaC, app-runtime, hosted-agent, and outp
 | `AZURE_ENV_NAME` | Yes | set by `azd env new` | Name of the azd environment |
 | `AZURE_LOCATION` | Yes | none | Azure region used for provisioning |
 | `AZURE_SUBSCRIPTION_ID` | Yes | active CLI subscription | Subscription targeted by the deployment |
+| `AZURE_TENANT_ID` | Yes | none | Azure AD tenant ID; required by the `azure.ai.agents` extension postdeploy hook |
 | `AZURE_RESOURCE_GROUP` | Yes | `rg-<environment>` in IaC | Resource group name passed into `main.bicep` |
 | `AZURE_PRINCIPAL_ID` | Yes | none | Principal used for project-scoped role assignment in the Foundry project |
 | `AZURE_PRINCIPAL_TYPE` | Yes | none | Principal type for that role assignment, for example `User` or `ServicePrincipal` |
@@ -295,7 +299,7 @@ The table below consolidates the Azure, IaC, app-runtime, hosted-agent, and outp
 | `USE_WORKFLOWS` | No | `false` | Legacy compatibility flag |
 | `FOUNDRY_PROJECT_ENDPOINT` | Yes in distributed mode | empty string | Backend runtime endpoint used by `DistributedOrchestratorAgent`; Bicep sets it from `AZURE_AI_PROJECT_ENDPOINT` |
 | `FOUNDRY_MODEL` | Optional | empty string | Optional model binding if your manifests or runtime consume it |
-| `AGENT_ROLE` | Yes inside each hosted agent | manifest-specific | Selects `analysis`, `candidate`, or `recommendation` |
+| `SERVICE_ROLE` | Yes inside each hosted agent | manifest-specific | Selects `analysis`, `candidate`, or `recommendation` |
 | `FOUNDRY_AGENT_NAME` | Hosted runtime | managed by platform | Name of the running hosted agent |
 | `FOUNDRY_AGENT_VERSION` | Hosted runtime | managed by platform | Active hosted-agent version |
 | `FOUNDRY_AGENT_SESSION_ID` | Hosted runtime | managed by platform | Request/session identifier |
@@ -358,11 +362,13 @@ resources:
   cpu: "0.5"
   memory: 1Gi
 environment_variables:
-  - name: AGENT_ROLE
+  - name: SERVICE_ROLE
     value: analysis
 tools: []
 ```
-The service-level `startupCommand` currently comes from `azure.yaml` (`python main.py`), the container image comes from `agents/analysis/Dockerfile`, and the app itself is served by `InvocationAgentServerHost` on port `8088`. Equivalent candidate and recommendation manifests keep the same shape and change only the `name` and `AGENT_ROLE` values.
+The service-level `startupCommand` currently comes from `azure.yaml` (`python main.py`), the container image comes from `agents/analysis/Dockerfile`, and the app itself is served by `InvocationAgentServerHost` on port `8088`. Equivalent candidate and recommendation manifests keep the same shape and change only the `name` and `SERVICE_ROLE` values.
+
+> **Note:** The `AGENT_*` and `FOUNDRY_*` environment variable prefixes are reserved by the Foundry platform. Use `SERVICE_ROLE` (not `AGENT_ROLE`) for custom variables.
 ### 8.4 Invocations payload shape
 This architecture uses deterministic JSON payloads rather than free-form chat prompts.
 Analysis payload:
@@ -426,7 +432,7 @@ Confirm external ingress on the frontend, internal ingress on the backend, targe
 ```bash
 azd ai agent show
 ```
-Confirm that all three agents are present, the newest version is active, startup succeeded, and environment values such as `AGENT_ROLE` and project endpoint are correct.
+Confirm that all three agents are present, the newest version is active, startup succeeded, and environment values such as `SERVICE_ROLE` and project endpoint are correct.
 ### 9.4 Test the public frontend endpoint
 ```bash
 curl -I https://<frontend-endpoint>
@@ -535,6 +541,10 @@ This is the fastest way to confirm whether traffic is still pinned to an older r
 | backend starts but distributed mode fails | missing `FOUNDRY_PROJECT_ENDPOINT` | backend env vars | set it from provisioning outputs |
 | hosted agent is not reachable | manifest or version issue | `azd ai agent show`, `azd ai agent monitor` | fix the manifest and redeploy the agent |
 | image pull fails | ACR auth or wrong tag | Container App events, agent status | verify tags, image names, and registry permissions |
+| agent build fails with 404 BlobNotFound | `docker.context` not set in azure.yaml | agent Dockerfiles need repo root as context | add `context: ../..` and `path: ./Dockerfile` in azure.yaml |
+| Docker Hub rate limit (`toomanyrequests`) | unauthenticated pulls during ACR Tasks | base image FROM lines | switch to `public.ecr.aws/docker/library/` mirrors |
+| postdeploy fails with `AZURE_TENANT_ID not set` | missing env var for agents extension | `azd env get-values` | run `azd env set AZURE_TENANT_ID "$(az account show --query tenantId -o tsv)"` |
+| Rust build fails with `rustc X.Y is not supported` | base image Rust version too old for deps | Dockerfile FROM tag | add `RUN rustup update stable && rustup default stable` before `cargo build` |
 | startup fails with a port error | manifest and runtime port disagree | target port, container config | align the manifest and runtime port |
 | direct browser call to backend fails | backend is internal by design | ingress settings | use the frontend origin or an internal test path |
 ### 11.6 Practical debugging order
@@ -573,7 +583,8 @@ Cost-control tips:
 - `azd auth login` completed
 - correct subscription selected
 - `azd` is at least `1.24.0`
-- `azure.ai.agents` is at least `0.1.30-preview`
+- `azure.ai.agents` is at least `0.1.31-preview`
+- `AZURE_TENANT_ID` is set in the azd environment
 - environment values reviewed with `azd env get-values`
 - `EXECUTION_MODE=agent_distributed`
 ### 14.2 After provisioning

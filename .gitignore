@@ -31,3 +31,4 @@ backend/.pytest_cache/
 htmlcov/
 .coverage
 infra/preflight-*
+.playwright-mcp/

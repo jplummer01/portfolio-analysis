@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 from pydantic import BaseModel, Field
+
+from src.api.models.debug import DebugInfo
 
 
 class ScoreBreakdown(BaseModel):
@@ -33,3 +37,4 @@ class RecommendResponse(BaseModel):
     recommendations: dict[str, list[ScoredCandidate]]
     disclaimer: str
     timestamp: str
+    debug_info: DebugInfo | None = None

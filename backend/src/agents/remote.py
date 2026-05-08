@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
+
+from src.api.models.debug import AgentCallRecord
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +27,10 @@ class RemoteAgentProxy:
             "/endpoint/protocols/invocations"
         )
 
-    async def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Invoke the remote agent via the Foundry invocations protocol."""
+    async def invoke(
+        self, payload: dict[str, Any]
+    ) -> tuple[dict[str, Any], AgentCallRecord]:
+        """Invoke the remote agent and return (result, call_record)."""
         url = self._build_url()
         headers = {"Content-Type": "application/json"}
         credential: Any | None = None
@@ -49,10 +54,43 @@ class RemoteAgentProxy:
             if credential is not None:
                 await credential.close()
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            return response.json()
+        start = time.monotonic()
+        status_code: int | None = None
+        error_msg: str | None = None
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(url, json=payload, headers=headers)
+                status_code = response.status_code
+                response.raise_for_status()
+                result = response.json()
+        except Exception as exc:
+            elapsed = (time.monotonic() - start) * 1000
+            error_msg = str(exc)
+            logger.debug(
+                "Agent %s call to %s failed (%s) in %.0fms: %s",
+                self.agent_name, url, status_code, elapsed, error_msg,
+            )
+            record = AgentCallRecord(
+                agent_name=self.agent_name,
+                url=url,
+                status_code=status_code,
+                latency_ms=round(elapsed, 1),
+                error=error_msg,
+            )
+            raise type(exc)(str(exc)) from exc  # re-raise with record accessible
+        else:
+            elapsed = (time.monotonic() - start) * 1000
+            logger.debug(
+                "Agent %s call to %s returned %s in %.0fms",
+                self.agent_name, url, status_code, elapsed,
+            )
+            record = AgentCallRecord(
+                agent_name=self.agent_name,
+                url=url,
+                status_code=status_code,
+                latency_ms=round(elapsed, 1),
+            )
+            return result, record
 
 
 class RemoteAnalysisProxy(RemoteAgentProxy):

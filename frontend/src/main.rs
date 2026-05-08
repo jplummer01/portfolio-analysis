@@ -147,6 +147,8 @@ struct AnalyseForm {
     existing_funds: String,
     #[serde(default)]
     allocations: String,
+    #[serde(default)]
+    debug: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,6 +157,8 @@ struct RecommendForm {
     candidate_funds: String,
     #[serde(default)]
     allocations: String,
+    #[serde(default)]
+    debug: String,
 }
 
 #[tokio::main]
@@ -320,13 +324,19 @@ async fn post_analyse_page(
     Form(form): Form<AnalyseForm>,
 ) -> Html<String> {
     let existing_funds = split_symbols(&form.existing_funds);
+    let debug_on = form.debug == "on" || form.debug == "true";
+    let api_path = if debug_on {
+        "/api/analyse?debug=true"
+    } else {
+        "/api/analyse"
+    };
     let result = if existing_funds.is_empty() {
         Err("Enter at least one existing fund before analysing.".to_string())
     } else {
         match parse_optional_allocations(&form.allocations, existing_funds.len()) {
             Ok(allocations) => state
                 .post_json::<_, AnalysisResponse>(
-                    "/api/analyse",
+                    api_path,
                     &AnalysePayload {
                         existing_funds,
                         allocations,
@@ -342,6 +352,7 @@ async fn post_analyse_page(
         AnalysePageState {
             existing_funds_input: form.existing_funds,
             allocations_input: form.allocations,
+            debug_enabled: debug_on,
             result: Some(result),
         },
         &state.config.backend_base_url,
@@ -361,6 +372,12 @@ async fn post_recommend_page(
 ) -> Html<String> {
     let existing_funds = split_symbols(&form.existing_funds);
     let candidate_funds = split_symbols(&form.candidate_funds);
+    let debug_on = form.debug == "on" || form.debug == "true";
+    let api_path = if debug_on {
+        "/api/recommend?debug=true"
+    } else {
+        "/api/recommend"
+    };
     let result = if existing_funds.is_empty() {
         Err("Enter at least one existing fund before requesting candidates.".to_string())
     } else if candidate_funds.is_empty() {
@@ -369,7 +386,7 @@ async fn post_recommend_page(
         match parse_optional_allocations(&form.allocations, existing_funds.len()) {
             Ok(allocations) => state
                 .post_json::<_, RecommendResponse>(
-                    "/api/recommend",
+                    api_path,
                     &RecommendPayload {
                         existing_funds,
                         candidate_funds,
@@ -387,6 +404,7 @@ async fn post_recommend_page(
             existing_funds_input: form.existing_funds,
             candidate_funds_input: form.candidate_funds,
             allocations_input: form.allocations,
+            debug_enabled: debug_on,
             result: Some(result),
         },
         &state.config.backend_base_url,

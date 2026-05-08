@@ -28,6 +28,7 @@ backend/
 │   │   ├── main.py               # FastAPI app creation and router registration
 │   │   ├── models/
 │   │   │   ├── analysis.py       # Analyse request/response schemas
+│   │   │   ├── debug.py          # DebugInfo and AgentCallRecord schemas
 │   │   │   ├── ingest.py         # Ingestion request/response schemas and Holding/FundInput
 │   │   │   └── recommendation.py # Recommendation request/response schemas
 │   │   └── routes/
@@ -178,6 +179,8 @@ curl -X POST http://127.0.0.1:3000/api/ingest/upload \
 ### POST `/api/analyse`
 
 - **Purpose:** Analyse an existing portfolio
+- **Query params:**
+  - `debug: bool` — optional (default `false`). When `true`, the response includes a `debug_info` object.
 - **Request model:** `AnalyseRequest`
   - `existing_funds: list[str]` — required, minimum length 1
   - `allocations: list[float] | null` — optional portfolio allocations; equal weighting is used if missing or length mismatches
@@ -191,6 +194,7 @@ curl -X POST http://127.0.0.1:3000/api/ingest/upload \
   - `fee_analysis` — per-fund ERs and portfolio weighted ER
   - `disclaimer: str`
   - `timestamp: str`
+  - `debug_info: DebugInfo | null` — present only when `?debug=true`
 
 If `USE_WORKFLOWS=true`, the route first tries the workflow implementation and falls back to direct tool execution on error.
 
@@ -205,6 +209,8 @@ curl -X POST http://127.0.0.1:3000/api/analyse \
 ### POST `/api/recommend`
 
 - **Purpose:** Score candidate replacement funds for each existing fund
+- **Query params:**
+  - `debug: bool` — optional (default `false`). When `true`, the response includes a `debug_info` object.
 - **Request model:** `RecommendRequest`
   - `existing_funds: list[str]` — required, minimum length 1
   - `candidate_funds: list[str]` — required, minimum length 1
@@ -213,6 +219,7 @@ curl -X POST http://127.0.0.1:3000/api/analyse \
   - `recommendations: dict[str, list[ScoredCandidate]]`
   - `disclaimer: str`
   - `timestamp: str`
+  - `debug_info: DebugInfo | null` — present only when `?debug=true`
 - **Per candidate fields:**
   - `symbol: str`
   - `total_score: float`
@@ -231,6 +238,28 @@ curl -X POST http://127.0.0.1:3000/api/recommend \
   -H 'Content-Type: application/json' \
   -d '{"existing_funds":["SPY"],"candidate_funds":["ARKK","SCHD","VXUS"]}'
 ```
+
+### Debug info schema (`DebugInfo`)
+
+Returned in `debug_info` when `?debug=true`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `execution_mode` | `string` | Which mode ran (`direct`, `workflow`, `agent_local`, `agent_distributed`) |
+| `agents_called` | `AgentCallRecord[]` | Remote agent invocations (empty in `direct` mode) |
+| `fallback_used` | `bool` | Whether the route fell back to direct execution |
+| `fallback_reason` | `string \| null` | Error that triggered fallback |
+| `total_latency_ms` | `float \| null` | Total request processing time in milliseconds |
+
+Each `AgentCallRecord`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `agent_name` | `string` | Agent name (e.g. `analysis-agent`) |
+| `url` | `string` | Full invocations protocol URL |
+| `status_code` | `int \| null` | HTTP status from the agent |
+| `latency_ms` | `float \| null` | Round-trip time in milliseconds |
+| `error` | `string \| null` | Error message if the call failed |
 
 ## 5. Deterministic Tools
 

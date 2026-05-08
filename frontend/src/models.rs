@@ -98,6 +98,24 @@ pub struct FeeAnalysis {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AgentCallRecord {
+    pub agent_name: String,
+    pub url: String,
+    pub status_code: Option<i32>,
+    pub latency_ms: Option<f64>,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DebugInfo {
+    pub execution_mode: String,
+    pub agents_called: Vec<AgentCallRecord>,
+    pub fallback_used: bool,
+    pub fallback_reason: Option<String>,
+    pub total_latency_ms: Option<f64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AnalysisResponse {
     pub overlap_matrix: OverlapMatrix,
     pub concentration: ConcentrationResult,
@@ -108,6 +126,7 @@ pub struct AnalysisResponse {
     pub fee_analysis: FeeAnalysis,
     pub disclaimer: String,
     pub timestamp: String,
+    pub debug_info: Option<DebugInfo>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -131,6 +150,7 @@ pub struct RecommendResponse {
     pub recommendations: std::collections::BTreeMap<String, Vec<ScoredCandidate>>,
     pub disclaimer: String,
     pub timestamp: String,
+    pub debug_info: Option<DebugInfo>,
 }
 
 #[derive(Clone, Debug, Serialize)]

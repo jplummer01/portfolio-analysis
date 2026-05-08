@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -13,6 +14,7 @@ from src.agents.remote import (
     RemoteRecommendationProxy,
 )
 from src.api.models.analysis import AnalysisResponse
+from src.api.models.debug import AgentCallRecord, DebugInfo
 from src.api.models.recommendation import RecommendResponse
 from src.core.config import settings
 from src.core.disclaimer import DISCLAIMER
@@ -37,12 +39,20 @@ class DistributedOrchestratorAgent:
         self,
         existing_funds: list[str],
         allocations: list[float] | None = None,
+        debug: bool = False,
     ) -> AnalysisResponse:
         """Run analysis by invoking the remote analysis agent."""
-        result = await self.analysis_proxy.invoke(
+        start = time.monotonic()
+        records: list[AgentCallRecord] = []
+
+        result, record = await self.analysis_proxy.invoke(
             {"existing_funds": existing_funds, "allocations": allocations}
         )
-        return AnalysisResponse(
+        records.append(record)
+
+        total_ms = round((time.monotonic() - start) * 1000, 1)
+
+        response = AnalysisResponse(
             overlap_matrix=result["overlap_matrix"],
             concentration=result["concentration"],
             top_overlaps=result["top_overlaps"],
@@ -54,16 +64,33 @@ class DistributedOrchestratorAgent:
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
+        if debug:
+            response.debug_info = DebugInfo(
+                execution_mode="agent_distributed",
+                agents_called=records,
+                fallback_used=False,
+                total_latency_ms=total_ms,
+            )
+
+        return response
+
     async def run_recommendation(
         self,
         existing_funds: list[str],
         candidate_funds: list[str],
+        debug: bool = False,
     ) -> RecommendResponse:
         """Run recommendation with concurrent fan-out and sequential scoring."""
-        analysis_result, candidate_result = await asyncio.gather(
+        start = time.monotonic()
+        records: list[AgentCallRecord] = []
+
+        analysis_result_record, candidate_result_record = await asyncio.gather(
             self.analysis_proxy.invoke({"existing_funds": existing_funds}),
             self.candidate_proxy.invoke({"candidate_funds": candidate_funds}),
         )
+        analysis_result, analysis_record = analysis_result_record
+        candidate_result, candidate_record = candidate_result_record
+        records.extend([analysis_record, candidate_record])
 
         logger.debug(
             "Remote pre-processing complete for %d existing funds and %d candidates",
@@ -71,11 +98,25 @@ class DistributedOrchestratorAgent:
             len(candidate_result.get("normalised_candidates", [])),
         )
 
-        result = await self.recommendation_proxy.invoke(
+        result, rec_record = await self.recommendation_proxy.invoke(
             {"existing_funds": existing_funds, "candidate_funds": candidate_funds}
         )
-        return RecommendResponse(
+        records.append(rec_record)
+
+        total_ms = round((time.monotonic() - start) * 1000, 1)
+
+        response = RecommendResponse(
             recommendations=result["recommendations"],
             disclaimer=DISCLAIMER,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
+
+        if debug:
+            response.debug_info = DebugInfo(
+                execution_mode="agent_distributed",
+                agents_called=records,
+                fallback_used=False,
+                total_latency_ms=total_ms,
+            )
+
+        return response

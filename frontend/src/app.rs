@@ -1,8 +1,8 @@
 use leptos::prelude::*;
 
 use crate::models::{
-    AnalysisResponse, AssetAllocation, AssetAllocationEntry, FeeAnalysis, IngestResponse,
-    RecommendResponse, ScoredCandidate, SectorExposure, SectorExposureEntry,
+    AnalysisResponse, AssetAllocation, AssetAllocationEntry, DebugInfo, FeeAnalysis,
+    IngestResponse, RecommendResponse, ScoredCandidate, SectorExposure, SectorExposureEntry,
 };
 
 const DISCLAIMER: &str = "For informational purposes only; not financial advice.";
@@ -198,6 +198,25 @@ thead th {
   background: #fff1da;
   color: #8a5b00;
 }
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+}
+.debug-panel {
+  border: 2px solid #6c48c9;
+  background: #f7f5ff;
+}
+.debug-panel summary {
+  cursor: pointer;
+  padding: 0.4rem 0;
+}
 .score-grid {
   display: grid;
   gap: 0.5rem;
@@ -286,6 +305,7 @@ impl Default for IngestPageState {
 pub struct AnalysePageState {
     pub existing_funds_input: String,
     pub allocations_input: String,
+    pub debug_enabled: bool,
     pub result: Option<Result<AnalysisResponse, String>>,
 }
 
@@ -294,6 +314,7 @@ impl Default for AnalysePageState {
         Self {
             existing_funds_input: "SPY, QQQ".to_string(),
             allocations_input: "0.5, 0.5".to_string(),
+            debug_enabled: false,
             result: None,
         }
     }
@@ -304,6 +325,7 @@ pub struct RecommendPageState {
     pub existing_funds_input: String,
     pub candidate_funds_input: String,
     pub allocations_input: String,
+    pub debug_enabled: bool,
     pub result: Option<Result<RecommendResponse, String>>,
 }
 
@@ -313,6 +335,7 @@ impl Default for RecommendPageState {
             existing_funds_input: "SPY".to_string(),
             candidate_funds_input: "ARKK, SCHD, VXUS".to_string(),
             allocations_input: String::new(),
+            debug_enabled: false,
             result: None,
         }
     }
@@ -517,6 +540,15 @@ fn AnalysePage(state: AnalysePageState) -> impl IntoView {
                             placeholder="0.5, 0.5"
                         />
                     </label>
+                    <label class="checkbox-label">
+                        <input
+                            type="checkbox"
+                            name="debug"
+                            value="on"
+                            checked=state.debug_enabled
+                        />
+                        " Debug mode"
+                    </label>
                     <button type="submit">"Analyse portfolio"</button>
                 </form>
             </section>
@@ -572,6 +604,15 @@ fn RecommendPage(state: RecommendPageState) -> impl IntoView {
                             value=state.allocations_input
                             placeholder="0.5, 0.5"
                         />
+                    </label>
+                    <label class="checkbox-label">
+                        <input
+                            type="checkbox"
+                            name="debug"
+                            value="on"
+                            checked=state.debug_enabled
+                        />
+                        " Debug mode"
                     </label>
                     <button type="submit">"Score candidates"</button>
                 </form>
@@ -646,6 +687,7 @@ fn render_ingest_result(response: IngestResponse) -> impl IntoView {
 }
 
 fn render_analysis_result(response: AnalysisResponse) -> impl IntoView {
+    let debug_view = render_debug_info(response.debug_info.clone());
     let AnalysisResponse {
         overlap_matrix,
         concentration,
@@ -656,6 +698,7 @@ fn render_analysis_result(response: AnalysisResponse) -> impl IntoView {
         fee_analysis,
         disclaimer,
         timestamp,
+        ..
     } = response;
 
     let data_quality_cards = data_quality
@@ -777,6 +820,7 @@ fn render_analysis_result(response: AnalysisResponse) -> impl IntoView {
             <h3>"Fee analysis"</h3>
             <FeeAnalysisSection fee_analysis=fee_analysis />
         </section>
+        {debug_view}
         <p class="muted">{disclaimer}</p>
     }
 }
@@ -863,6 +907,7 @@ fn FeeAnalysisSection(fee_analysis: FeeAnalysis) -> impl IntoView {
 }
 
 fn render_recommendation_result(response: RecommendResponse) -> impl IntoView {
+    let debug_view = render_debug_info(response.debug_info.clone());
     let groups = response
         .recommendations
         .into_iter()
@@ -883,6 +928,7 @@ fn render_recommendation_result(response: RecommendResponse) -> impl IntoView {
             <span class="pill">"Data quality indicators use backend penalties and explanation text."</span>
         </div>
         <div class="grid">{groups}</div>
+        {debug_view}
         <p class="muted">{response.disclaimer}</p>
     }
 }
@@ -1130,4 +1176,97 @@ fn percentage(value: f64, max: f64) -> f64 {
 
 fn format_percent(value: f64) -> String {
     format!("{:.2}%", value * 100.0)
+}
+
+fn render_debug_info(debug_info: Option<DebugInfo>) -> AnyView {
+    match debug_info {
+        None => view! { }.into_any(),
+        Some(info) => {
+            let mode_label = info.execution_mode.clone();
+            let fallback_badge = if info.fallback_used {
+                let reason = info
+                    .fallback_reason
+                    .unwrap_or_else(|| "unknown".to_string());
+                view! {
+                    <span class="badge warn">{format!("Fallback used: {reason}")}</span>
+                }
+                .into_any()
+            } else {
+                view! {
+                    <span class="badge good">"No fallback"</span>
+                }
+                .into_any()
+            };
+
+            let latency_label = info
+                .total_latency_ms
+                .map(|ms| format!("{ms:.0}ms"))
+                .unwrap_or_else(|| "n/a".to_string());
+
+            let agent_rows = if info.agents_called.is_empty() {
+                view! {
+                    <tr>
+                        <td colspan="5" class="muted">"No remote agents called (direct mode)"</td>
+                    </tr>
+                }
+                .into_any()
+            } else {
+                info.agents_called
+                    .into_iter()
+                    .map(|record| {
+                        let status = record
+                            .status_code
+                            .map(|c| c.to_string())
+                            .unwrap_or_else(|| "—".to_string());
+                        let latency = record
+                            .latency_ms
+                            .map(|ms| format!("{ms:.0}ms"))
+                            .unwrap_or_else(|| "—".to_string());
+                        let error_cell = record
+                            .error
+                            .unwrap_or_else(|| "—".to_string());
+                        let status_class = if record.status_code == Some(200) {
+                            "badge good"
+                        } else {
+                            "badge warn"
+                        };
+                        view! {
+                            <tr>
+                                <td><code>{record.agent_name}</code></td>
+                                <td class="muted" style="font-size:0.75rem;word-break:break-all">{record.url}</td>
+                                <td><span class=status_class>{status}</span></td>
+                                <td>{latency}</td>
+                                <td class="muted">{error_cell}</td>
+                            </tr>
+                        }
+                    })
+                    .collect_view()
+                    .into_any()
+            };
+
+            view! {
+                <details class="card debug-panel" open=true>
+                    <summary><strong>"🔍 Debug info"</strong></summary>
+                    <div class="meta" style="margin-top:0.5rem">
+                        <span class="pill">{format!("Mode: {mode_label}")}</span>
+                        {fallback_badge}
+                        <span class="pill">{format!("Total: {latency_label}")}</span>
+                    </div>
+                    <table class="table" style="margin-top:0.5rem;font-size:0.85rem">
+                        <thead>
+                            <tr>
+                                <th>"Agent"</th>
+                                <th>"URL"</th>
+                                <th>"Status"</th>
+                                <th>"Latency"</th>
+                                <th>"Error"</th>
+                            </tr>
+                        </thead>
+                        <tbody>{agent_rows}</tbody>
+                    </table>
+                </details>
+            }
+            .into_any()
+        }
+    }
 }

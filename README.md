@@ -73,6 +73,24 @@ You can also open http://127.0.0.1:3000 in your browser and use the web UI to **
 
 Available stub funds: `SPY`, `QQQ`, `VTI`, `ARKK`, `SCHD`, `VUG`, `VXUS`
 
+### Debug mode
+
+Add `?debug=true` to any analyse or recommend request to see execution diagnostics (which mode ran, which agents were called, latency, fallback status):
+
+```bash
+# Debug analyse
+curl -X POST http://127.0.0.1:3000/api/analyse?debug=true \
+  -H "Content-Type: application/json" \
+  -d '{"existing_funds": ["SPY", "QQQ"]}'
+
+# Debug recommend
+curl -X POST http://127.0.0.1:3000/api/recommend?debug=true \
+  -H "Content-Type: application/json" \
+  -d '{"existing_funds": ["SPY"], "candidate_funds": ["ARKK", "SCHD"]}'
+```
+
+The response includes a `debug_info` object with `execution_mode`, `agents_called`, `fallback_used`, and `total_latency_ms`. In the web UI, check the **Debug mode** checkbox on the Analyse or Recommend page.
+
 ### Run tests
 
 ```bash

@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 from pydantic import BaseModel, Field
+
+from src.api.models.debug import DebugInfo
 
 
 class OverlapPair(BaseModel):
@@ -107,3 +111,4 @@ class AnalysisResponse(BaseModel):
     fee_analysis: FeeAnalysisResult
     disclaimer: str
     timestamp: str
+    debug_info: DebugInfo | None = None

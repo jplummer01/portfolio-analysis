@@ -171,7 +171,9 @@ class TestDistributedOrchestratorAgent:
 
             async def fake_invoke(self, payload):
                 assert payload == {"existing_funds": ["SPY", "QQQ"], "allocations": None}
-                return expected
+                from src.api.models.debug import AgentCallRecord
+                record = AgentCallRecord(agent_name="analysis-agent", url="http://example.com/foundry/agents/analysis-agent/endpoint/protocols/invocations")
+                return expected, record
 
             monkeypatch.setattr(distributed_module.RemoteAnalysisProxy, "invoke", fake_invoke)
 
@@ -210,14 +212,18 @@ class TestDistributedOrchestratorAgent:
                 analysis_started.set()
                 await candidate_started.wait()
                 await release_fanout.wait()
-                return {"data_quality": []}
+                from src.api.models.debug import AgentCallRecord
+                record = AgentCallRecord(agent_name="analysis-agent", url="http://fake")
+                return {"data_quality": []}, record
 
             async def fake_candidate(self, payload):
                 assert payload == {"candidate_funds": ["VTI", "QQQ"]}
                 candidate_started.set()
                 await analysis_started.wait()
                 await release_fanout.wait()
-                return {"normalised_candidates": normalise_funds(["VTI", "QQQ"])}
+                from src.api.models.debug import AgentCallRecord
+                record = AgentCallRecord(agent_name="candidate-agent", url="http://fake")
+                return {"normalised_candidates": normalise_funds(["VTI", "QQQ"])}, record
 
             async def fake_recommendation(self, payload):
                 assert analysis_started.is_set()
@@ -226,7 +232,9 @@ class TestDistributedOrchestratorAgent:
                     "existing_funds": ["SPY"],
                     "candidate_funds": ["VTI", "QQQ"],
                 }
-                return expected
+                from src.api.models.debug import AgentCallRecord
+                record = AgentCallRecord(agent_name="recommendation-agent", url="http://fake")
+                return expected, record
 
             monkeypatch.setattr(
                 distributed_module.RemoteAnalysisProxy,
@@ -301,6 +309,8 @@ class TestRemoteAgentProxy:
         monkeypatch.setitem(sys.modules, "azure.identity.aio", aio_module)
 
         class FakeResponse:
+            status_code = 200
+
             def raise_for_status(self):
                 captured["status_checked"] = True
 
@@ -325,7 +335,7 @@ class TestRemoteAgentProxy:
 
         monkeypatch.setattr(remote_module.httpx, "AsyncClient", FakeAsyncClient)
 
-        result = await remote_module.RemoteAnalysisProxy(
+        result, record = await remote_module.RemoteAnalysisProxy(
             "http://example.com/foundry/"
         ).invoke({"existing_funds": ["SPY"]})
 
@@ -343,6 +353,10 @@ class TestRemoteAgentProxy:
         assert captured["closed"] is True
         assert captured["status_checked"] is True
         assert result == {"ok": True}
+        assert record.agent_name == "analysis-agent"
+        assert record.status_code == 200
+        assert record.latency_ms is not None
+        assert record.error is None
 
     def test_proxy_names(self):
         from src.agents.remote import (
@@ -404,6 +418,107 @@ class TestAgentLocalRoutes:
             data = response.json()
             assert "disclaimer" in data
             assert "recommendations" in data
+        finally:
+            _restore_env_var("EXECUTION_MODE", previous)
+            _refresh_settings()
+
+
+class TestDebugMode:
+    """Test that ?debug=true returns debug_info in responses."""
+
+    @pytest.mark.asyncio
+    async def test_analyse_debug_true_returns_debug_info(self):
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/analyse?debug=true",
+                json={"existing_funds": ["SPY", "QQQ"]},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["debug_info"] is not None
+        assert "execution_mode" in data["debug_info"]
+        assert "fallback_used" in data["debug_info"]
+        assert "total_latency_ms" in data["debug_info"]
+
+    @pytest.mark.asyncio
+    async def test_analyse_debug_false_returns_null_debug_info(self):
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/analyse",
+                json={"existing_funds": ["SPY", "QQQ"]},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["debug_info"] is None
+
+    @pytest.mark.asyncio
+    async def test_recommend_debug_true_returns_debug_info(self):
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/recommend?debug=true",
+                json={
+                    "existing_funds": ["SPY"],
+                    "candidate_funds": ["ARKK", "SCHD"],
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["debug_info"] is not None
+        assert data["debug_info"]["execution_mode"] == "direct"
+        assert data["debug_info"]["fallback_used"] is False
+
+    @pytest.mark.asyncio
+    async def test_recommend_debug_false_returns_null_debug_info(self):
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/recommend",
+                json={
+                    "existing_funds": ["SPY"],
+                    "candidate_funds": ["ARKK", "SCHD"],
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["debug_info"] is None
+
+    @pytest.mark.asyncio
+    async def test_analyse_debug_with_agent_local_fallback(self):
+        """When agent_local fails, debug_info should show fallback_used=True."""
+        from src.api.main import app
+
+        previous = os.environ.get("EXECUTION_MODE")
+        os.environ["EXECUTION_MODE"] = "agent_local"
+        try:
+            _refresh_settings()
+
+            # agent_local works in this env, so fallback_used should be False
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/analyse?debug=true",
+                    json={"existing_funds": ["SPY"]},
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["debug_info"] is not None
+            assert data["debug_info"]["execution_mode"] == "agent_local"
         finally:
             _restore_env_var("EXECUTION_MODE", previous)
             _refresh_settings()

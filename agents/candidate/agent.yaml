@@ -8,6 +8,6 @@ resources:
   cpu: "0.5"
   memory: 1Gi
 environment_variables:
-  - name: AGENT_ROLE
+  - name: SERVICE_ROLE
     value: candidate
 tools: []

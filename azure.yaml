@@ -11,9 +11,9 @@ services:
         host: azure.ai.agent
         language: docker
         docker:
-            remoteBuild: true
+            path: ./Dockerfile
             context: ../..
-            path: ./agents/analysis/Dockerfile
+            remoteBuild: true
         config:
             container:
                 resources:
@@ -31,9 +31,9 @@ services:
         host: azure.ai.agent
         language: docker
         docker:
-            remoteBuild: true
+            path: ./Dockerfile
             context: ../..
-            path: ./agents/candidate/Dockerfile
+            remoteBuild: true
         config:
             container:
                 resources:
@@ -51,9 +51,9 @@ services:
         host: azure.ai.agent
         language: docker
         docker:
-            remoteBuild: true
+            path: ./Dockerfile
             context: ../..
-            path: ./agents/recommendation/Dockerfile
+            remoteBuild: true
         config:
             container:
                 resources:

@@ -27,14 +27,14 @@ Inspired by tools like Morningstar's Portfolio X-Ray, this app measures holdings
 
 ```mermaid
 flowchart TD
-    Browser -->|HTTPS| Frontend[🖥️ Frontend — Axum :3000]
-    Frontend -->|/api/* proxy| Backend[⚙️ Backend — FastAPI :8000]
-    Backend -->|Invocations protocol| Agents[🤖 Foundry Hosted Agents]
+    Browser -->|HTTPS| Frontend["🖥️ Frontend — Axum :3000"]
+    Frontend -->|"/api/* proxy"| Backend["⚙️ Backend — FastAPI :8000"]
+    Backend -->|Invocations protocol| Agents["🤖 Foundry Hosted Agents"]
     Agents --> A1[Analysis Agent]
     Agents --> A2[Candidate Agent]
     Agents --> A3[Recommendation Agent]
-    Teams[💬 Teams / M365 Copilot] -->|Responses protocol| PA[🧠 Portfolio Assistant]
-    PA -->|@tool calls| Backend
+    Teams["💬 Teams / M365 Copilot"] -->|Responses protocol| PA["🧠 Portfolio Assistant"]
+    PA -->|tool calls| Backend
 ```
 
 **Single-origin design** — the browser only talks to the frontend. All `/api/*` requests are reverse-proxied to the backend. The portfolio-assistant provides a conversational interface for Teams/M365.

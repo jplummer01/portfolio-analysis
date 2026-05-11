@@ -56,7 +56,7 @@ flowchart TD
 ### 1️⃣ Clone & install
 
 ```bash
-git clone https://github.com/your-org/portfolio-analysis.git
+git clone https://github.com/<your-org>/portfolio-analysis.git
 cd portfolio-analysis/backend
 pip install -r requirements.txt
 ```

@@ -114,7 +114,7 @@ Before deployment, confirm that the target Azure region supports the required Co
 Use this when you want the shortest path from clone to deployment.
 ```bash
 # 1. Clone and navigate
-git clone https://github.com/your-org/portfolio-analysis.git
+git clone https://github.com/<your-org>/portfolio-analysis.git
 cd portfolio-analysis
 git checkout feature/agent-orchestration
 # 2. Install azd agent extension (if not already)
@@ -230,7 +230,7 @@ The table below lists every azd environment variable used by this project, group
 
 | Variable | Example | Used by |
 |----------|---------|---------|
-| `AZURE_SUBSCRIPTION_ID` | `xxxxxxxx-xxxx-xxxx-xxxx-...` | Bicep (subscription targeting) |
+| `AZURE_SUBSCRIPTION_ID` | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` | Bicep (subscription targeting) |
 | `AZURE_LOCATION` | `eastus2` | Bicep (resource location) |
 | `AZURE_RESOURCE_GROUP` | `rg-my-project` | Bicep (resource group name) |
 | `AZURE_AI_ACCOUNT_NAME` | `my-ai-account` | Bicep (AI Foundry account) |

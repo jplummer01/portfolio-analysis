@@ -94,7 +94,7 @@ The portfolio-assistant uses the **Responses protocol**, which is required for T
 Before publishing, confirm the agent responds correctly in the Foundry Playground:
 
 1. Open the [Microsoft Foundry portal](https://ai.azure.com)
-2. Navigate to your project (`my-ai-project`)
+2. Navigate to your project (e.g. `my-ai-project`)
 3. Select **Agents** → **portfolio-assistant**
 4. Use the built-in chat to test:
    - "Analyse my portfolio with SPY, QQQ, and VTI"

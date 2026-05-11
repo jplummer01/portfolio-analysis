@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -13,6 +15,8 @@ class AgentCallRecord(BaseModel):
     status_code: int | None = None
     latency_ms: float | None = None
     error: str | None = None
+    request_payload: dict[str, Any] | None = None
+    response_body: dict[str, Any] | str | None = None
 
 
 class DebugInfo(BaseModel):

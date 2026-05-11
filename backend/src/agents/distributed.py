@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.agents.remote import (
+    RemoteAgentError,
     RemoteAnalysisProxy,
     RemoteCandidateProxy,
     RemoteRecommendationProxy,
@@ -20,6 +21,18 @@ from src.core.config import settings
 from src.core.disclaimer import DISCLAIMER
 
 logger = logging.getLogger(__name__)
+
+
+class DistributedOrchestrationError(Exception):
+    """Raised when the distributed orchestration fails.
+
+    Carries any ``AgentCallRecord`` objects collected before the failure so
+    that callers (route handlers) can include them in debug responses.
+    """
+
+    def __init__(self, message: str, records: list[AgentCallRecord]) -> None:
+        super().__init__(message)
+        self.records = records
 
 
 class DistributedOrchestratorAgent:
@@ -45,10 +58,14 @@ class DistributedOrchestratorAgent:
         start = time.monotonic()
         records: list[AgentCallRecord] = []
 
-        result, record = await self.analysis_proxy.invoke(
-            {"existing_funds": existing_funds, "allocations": allocations}
-        )
-        records.append(record)
+        try:
+            result, record = await self.analysis_proxy.invoke(
+                {"existing_funds": existing_funds, "allocations": allocations}
+            )
+            records.append(record)
+        except RemoteAgentError as exc:
+            records.append(exc.record)
+            raise DistributedOrchestrationError(str(exc), records) from exc
 
         total_ms = round((time.monotonic() - start) * 1000, 1)
 
@@ -84,13 +101,46 @@ class DistributedOrchestratorAgent:
         start = time.monotonic()
         records: list[AgentCallRecord] = []
 
-        analysis_result_record, candidate_result_record = await asyncio.gather(
-            self.analysis_proxy.invoke({"existing_funds": existing_funds}),
-            self.candidate_proxy.invoke({"candidate_funds": candidate_funds}),
+        # Fan-out: analysis + candidate in parallel
+        analysis_task = asyncio.ensure_future(
+            self.analysis_proxy.invoke({"existing_funds": existing_funds})
         )
-        analysis_result, analysis_record = analysis_result_record
-        candidate_result, candidate_record = candidate_result_record
-        records.extend([analysis_record, candidate_record])
+        candidate_task = asyncio.ensure_future(
+            self.candidate_proxy.invoke({"candidate_funds": candidate_funds})
+        )
+
+        try:
+            results = await asyncio.gather(
+                analysis_task, candidate_task, return_exceptions=True
+            )
+        except Exception as exc:
+            # Collect any records from tasks that completed with RemoteAgentError
+            for task in (analysis_task, candidate_task):
+                if task.done() and task.exception():
+                    task_exc = task.exception()
+                    if isinstance(task_exc, RemoteAgentError):
+                        records.append(task_exc.record)
+            raise DistributedOrchestrationError(str(exc), records) from exc
+
+        # Process gather results (may include exceptions)
+        for r in results:
+            if isinstance(r, RemoteAgentError):
+                records.append(r.record)
+            elif isinstance(r, Exception):
+                pass  # non-agent error; no record to capture
+            else:
+                _, record = r
+                records.append(record)
+
+        # If any result was an exception, raise with collected records
+        errors = [r for r in results if isinstance(r, Exception)]
+        if errors:
+            raise DistributedOrchestrationError(
+                str(errors[0]), records
+            ) from errors[0]
+
+        analysis_result, analysis_record = results[0]
+        candidate_result, candidate_record = results[1]
 
         logger.debug(
             "Remote pre-processing complete for %d existing funds and %d candidates",
@@ -98,10 +148,15 @@ class DistributedOrchestratorAgent:
             len(candidate_result.get("normalised_candidates", [])),
         )
 
-        result, rec_record = await self.recommendation_proxy.invoke(
-            {"existing_funds": existing_funds, "candidate_funds": candidate_funds}
-        )
-        records.append(rec_record)
+        # Sequential: recommendation scoring
+        try:
+            result, rec_record = await self.recommendation_proxy.invoke(
+                {"existing_funds": existing_funds, "candidate_funds": candidate_funds}
+            )
+            records.append(rec_record)
+        except RemoteAgentError as exc:
+            records.append(exc.record)
+            raise DistributedOrchestrationError(str(exc), records) from exc
 
         total_ms = round((time.monotonic() - start) * 1000, 1)
 

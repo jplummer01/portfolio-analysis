@@ -28,6 +28,7 @@ async def analyse(
     start = time.monotonic()
     fallback_used = False
     fallback_reason: str | None = None
+    partial_records: list = []
 
     if mode == ExecutionMode.WORKFLOW:
         try:
@@ -85,11 +86,13 @@ async def analyse(
             )
             fallback_used = True
             fallback_reason = f"agent_distributed error: {exc}"
+            partial_records = getattr(exc, "records", [])
 
     result = await analyse_portfolio(request.existing_funds, request.allocations)
     if debug:
         result.debug_info = DebugInfo(
             execution_mode=mode.value,
+            agents_called=partial_records if fallback_used else [],
             fallback_used=fallback_used,
             fallback_reason=fallback_reason,
             total_latency_ms=round((time.monotonic() - start) * 1000, 1),

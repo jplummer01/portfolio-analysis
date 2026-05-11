@@ -6,6 +6,7 @@ import sys
 import types
 
 import pytest
+import httpx
 from httpx import ASGITransport, AsyncClient
 
 
@@ -357,6 +358,8 @@ class TestRemoteAgentProxy:
         assert record.status_code == 200
         assert record.latency_ms is not None
         assert record.error is None
+        assert record.request_payload == {"existing_funds": ["SPY"]}
+        assert record.response_body == {"ok": True}
 
     def test_proxy_names(self):
         from src.agents.remote import (
@@ -521,4 +524,305 @@ class TestDebugMode:
             assert data["debug_info"]["execution_mode"] == "agent_local"
         finally:
             _restore_env_var("EXECUTION_MODE", previous)
+            _refresh_settings()
+
+
+class TestRemoteAgentErrorHandling:
+    """Test that HTTP errors are properly wrapped in RemoteAgentError."""
+
+    @pytest.mark.asyncio
+    async def test_http_error_raises_remote_agent_error(self, monkeypatch):
+        """HTTPStatusError must produce RemoteAgentError, not TypeError."""
+        import src.agents.remote as remote_module
+        from src.agents.remote import RemoteAgentError
+
+        class FakeResponse:
+            status_code = 500
+
+            def json(self):
+                return {"detail": "Internal Server Error"}
+
+            def raise_for_status(self):
+                raise httpx.HTTPStatusError(
+                    "Server Error",
+                    request=httpx.Request("POST", "http://fake"),
+                    response=httpx.Response(500),
+                )
+
+        class FakeAsyncClient:
+            def __init__(self, *, timeout):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, json, headers):
+                return FakeResponse()
+
+        monkeypatch.setattr(remote_module.httpx, "AsyncClient", FakeAsyncClient)
+        monkeypatch.delitem(sys.modules, "azure.identity.aio", raising=False)
+        monkeypatch.delitem(sys.modules, "azure.identity", raising=False)
+        monkeypatch.delitem(sys.modules, "azure", raising=False)
+
+        proxy = remote_module.RemoteAnalysisProxy("http://example.com/foundry/")
+
+        with pytest.raises(RemoteAgentError) as exc_info:
+            await proxy.invoke({"existing_funds": ["SPY"]})
+
+        err = exc_info.value
+        assert err.record.agent_name == "analysis-agent"
+        assert err.record.status_code == 500
+        assert err.record.latency_ms is not None
+        assert err.record.error is not None
+        assert err.record.request_payload == {"existing_funds": ["SPY"]}
+        assert err.record.response_body == {"detail": "Internal Server Error"}
+
+    @pytest.mark.asyncio
+    async def test_connection_error_raises_remote_agent_error(self, monkeypatch):
+        """Connection errors should also produce RemoteAgentError with record."""
+        import src.agents.remote as remote_module
+        from src.agents.remote import RemoteAgentError
+
+        class FakeAsyncClient:
+            def __init__(self, *, timeout):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, json, headers):
+                raise httpx.ConnectError("Connection refused")
+
+        monkeypatch.setattr(remote_module.httpx, "AsyncClient", FakeAsyncClient)
+        monkeypatch.delitem(sys.modules, "azure.identity.aio", raising=False)
+        monkeypatch.delitem(sys.modules, "azure.identity", raising=False)
+        monkeypatch.delitem(sys.modules, "azure", raising=False)
+
+        proxy = remote_module.RemoteAnalysisProxy("http://example.com/foundry/")
+
+        with pytest.raises(RemoteAgentError) as exc_info:
+            await proxy.invoke({"test": "data"})
+
+        err = exc_info.value
+        assert err.record.agent_name == "analysis-agent"
+        assert err.record.status_code is None
+        assert err.record.request_payload == {"test": "data"}
+        assert err.record.response_body is None
+
+
+class TestDistributedOrchestrationErrorPropagation:
+    """Test that distributed orchestration errors carry agent call records."""
+
+    @pytest.mark.asyncio
+    async def test_analysis_failure_propagates_record(self, monkeypatch):
+        import src.agents.distributed as distributed_module
+        from src.agents.distributed import DistributedOrchestrationError
+        from src.agents.remote import RemoteAgentError
+        from src.api.models.debug import AgentCallRecord
+
+        previous = os.environ.get("FOUNDRY_PROJECT_ENDPOINT")
+        os.environ["FOUNDRY_PROJECT_ENDPOINT"] = "http://example.com/foundry"
+        try:
+            _refresh_settings()
+
+            async def failing_invoke(self, payload):
+                record = AgentCallRecord(
+                    agent_name="analysis-agent",
+                    url="http://fake",
+                    status_code=500,
+                    latency_ms=100.0,
+                    error="Server Error",
+                    request_payload=payload,
+                    response_body={"detail": "failure"},
+                )
+                raise RemoteAgentError("Server Error", record)
+
+            monkeypatch.setattr(
+                distributed_module.RemoteAnalysisProxy, "invoke", failing_invoke
+            )
+
+            orchestrator = distributed_module.DistributedOrchestratorAgent()
+            with pytest.raises(DistributedOrchestrationError) as exc_info:
+                await orchestrator.run_analysis(["SPY", "QQQ"])
+
+            err = exc_info.value
+            assert len(err.records) == 1
+            assert err.records[0].agent_name == "analysis-agent"
+            assert err.records[0].status_code == 500
+            assert err.records[0].request_payload is not None
+            assert err.records[0].response_body == {"detail": "failure"}
+        finally:
+            _restore_env_var("FOUNDRY_PROJECT_ENDPOINT", previous)
+            _refresh_settings()
+
+    @pytest.mark.asyncio
+    async def test_recommendation_partial_failure_propagates_records(self, monkeypatch):
+        """When one fan-out agent fails, records from both should be captured."""
+        import src.agents.distributed as distributed_module
+        from src.agents.distributed import DistributedOrchestrationError
+        from src.agents.remote import RemoteAgentError
+        from src.api.models.debug import AgentCallRecord
+
+        previous = os.environ.get("FOUNDRY_PROJECT_ENDPOINT")
+        os.environ["FOUNDRY_PROJECT_ENDPOINT"] = "http://example.com/foundry"
+        try:
+            _refresh_settings()
+
+            async def successful_analysis(self, payload):
+                record = AgentCallRecord(
+                    agent_name="analysis-agent",
+                    url="http://fake",
+                    status_code=200,
+                    latency_ms=50.0,
+                    request_payload=payload,
+                    response_body={"data_quality": []},
+                )
+                return {"data_quality": []}, record
+
+            async def failing_candidate(self, payload):
+                record = AgentCallRecord(
+                    agent_name="candidate-agent",
+                    url="http://fake",
+                    status_code=503,
+                    latency_ms=200.0,
+                    error="Service Unavailable",
+                    request_payload=payload,
+                    response_body="Service Unavailable",
+                )
+                raise RemoteAgentError("Service Unavailable", record)
+
+            monkeypatch.setattr(
+                distributed_module.RemoteAnalysisProxy, "invoke", successful_analysis
+            )
+            monkeypatch.setattr(
+                distributed_module.RemoteCandidateProxy, "invoke", failing_candidate
+            )
+
+            orchestrator = distributed_module.DistributedOrchestratorAgent()
+            with pytest.raises(DistributedOrchestrationError) as exc_info:
+                await orchestrator.run_recommendation(["SPY"], ["VTI"])
+
+            err = exc_info.value
+            assert len(err.records) == 2
+            agent_names = {r.agent_name for r in err.records}
+            assert "analysis-agent" in agent_names
+            assert "candidate-agent" in agent_names
+        finally:
+            _restore_env_var("FOUNDRY_PROJECT_ENDPOINT", previous)
+            _refresh_settings()
+
+
+class TestDistributedFallbackDebugInfo:
+    """Test that fallback debug info surfaces partial agent call records."""
+
+    @pytest.mark.asyncio
+    async def test_analyse_distributed_fallback_shows_records(self, monkeypatch):
+        from src.api.main import app
+        import src.agents.distributed as distributed_module
+        from src.agents.remote import RemoteAgentError
+        from src.api.models.debug import AgentCallRecord
+
+        previous_mode = os.environ.get("EXECUTION_MODE")
+        previous_endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT")
+        os.environ["EXECUTION_MODE"] = "agent_distributed"
+        os.environ["FOUNDRY_PROJECT_ENDPOINT"] = "http://example.com/foundry"
+        try:
+            _refresh_settings()
+
+            async def failing_invoke(self, payload):
+                record = AgentCallRecord(
+                    agent_name="analysis-agent",
+                    url="http://fake/invoke",
+                    status_code=500,
+                    latency_ms=150.0,
+                    error="Internal Server Error",
+                    request_payload=payload,
+                    response_body={"detail": "error"},
+                )
+                raise RemoteAgentError("Internal Server Error", record)
+
+            monkeypatch.setattr(
+                distributed_module.RemoteAnalysisProxy, "invoke", failing_invoke
+            )
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/analyse?debug=true",
+                    json={"existing_funds": ["SPY"]},
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["debug_info"] is not None
+            assert data["debug_info"]["fallback_used"] is True
+            assert "agent_distributed" in data["debug_info"]["fallback_reason"]
+            assert len(data["debug_info"]["agents_called"]) == 1
+            agent_record = data["debug_info"]["agents_called"][0]
+            assert agent_record["agent_name"] == "analysis-agent"
+            assert agent_record["status_code"] == 500
+            assert agent_record["request_payload"] is not None
+            assert agent_record["response_body"] == {"detail": "error"}
+        finally:
+            _restore_env_var("EXECUTION_MODE", previous_mode)
+            _restore_env_var("FOUNDRY_PROJECT_ENDPOINT", previous_endpoint)
+            _refresh_settings()
+
+    @pytest.mark.asyncio
+    async def test_recommend_distributed_fallback_shows_records(self, monkeypatch):
+        from src.api.main import app
+        import src.agents.distributed as distributed_module
+        from src.agents.remote import RemoteAgentError
+        from src.api.models.debug import AgentCallRecord
+
+        previous_mode = os.environ.get("EXECUTION_MODE")
+        previous_endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT")
+        os.environ["EXECUTION_MODE"] = "agent_distributed"
+        os.environ["FOUNDRY_PROJECT_ENDPOINT"] = "http://example.com/foundry"
+        try:
+            _refresh_settings()
+
+            async def failing_invoke(self, payload):
+                record = AgentCallRecord(
+                    agent_name=self.agent_name,
+                    url="http://fake/invoke",
+                    status_code=502,
+                    latency_ms=300.0,
+                    error="Bad Gateway",
+                    request_payload=payload,
+                    response_body="Bad Gateway",
+                )
+                raise RemoteAgentError("Bad Gateway", record)
+
+            monkeypatch.setattr(
+                distributed_module.RemoteAnalysisProxy, "invoke", failing_invoke
+            )
+            monkeypatch.setattr(
+                distributed_module.RemoteCandidateProxy, "invoke", failing_invoke
+            )
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/recommend?debug=true",
+                    json={
+                        "existing_funds": ["SPY"],
+                        "candidate_funds": ["VTI"],
+                    },
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["debug_info"] is not None
+            assert data["debug_info"]["fallback_used"] is True
+            assert len(data["debug_info"]["agents_called"]) == 2
+        finally:
+            _restore_env_var("EXECUTION_MODE", previous_mode)
+            _restore_env_var("FOUNDRY_PROJECT_ENDPOINT", previous_endpoint)
             _refresh_settings()

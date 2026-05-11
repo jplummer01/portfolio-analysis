@@ -13,6 +13,18 @@ from src.api.models.debug import AgentCallRecord
 logger = logging.getLogger(__name__)
 
 
+class RemoteAgentError(Exception):
+    """Raised when a remote Foundry agent invocation fails.
+
+    Carries the ``AgentCallRecord`` so callers can include it in debug info
+    even when the call did not succeed.
+    """
+
+    def __init__(self, message: str, record: AgentCallRecord) -> None:
+        super().__init__(message)
+        self.record = record
+
+
 class RemoteAgentProxy:
     """Base class for remote Foundry agent invocation via invocations protocol."""
 
@@ -57,12 +69,16 @@ class RemoteAgentProxy:
         start = time.monotonic()
         status_code: int | None = None
         error_msg: str | None = None
+        response_body: dict[str, Any] | str | None = None
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(url, json=payload, headers=headers)
                 status_code = response.status_code
+                try:
+                    response_body = response.json()
+                except Exception:
+                    response_body = response.text
                 response.raise_for_status()
-                result = response.json()
         except Exception as exc:
             elapsed = (time.monotonic() - start) * 1000
             error_msg = str(exc)
@@ -76,8 +92,10 @@ class RemoteAgentProxy:
                 status_code=status_code,
                 latency_ms=round(elapsed, 1),
                 error=error_msg,
+                request_payload=payload,
+                response_body=response_body,
             )
-            raise type(exc)(str(exc)) from exc  # re-raise with record accessible
+            raise RemoteAgentError(str(exc), record) from exc
         else:
             elapsed = (time.monotonic() - start) * 1000
             logger.debug(
@@ -89,8 +107,10 @@ class RemoteAgentProxy:
                 url=url,
                 status_code=status_code,
                 latency_ms=round(elapsed, 1),
+                request_payload=payload,
+                response_body=response_body,
             )
-            return result, record
+            return response_body, record  # type: ignore[return-value]
 
 
 class RemoteAnalysisProxy(RemoteAgentProxy):

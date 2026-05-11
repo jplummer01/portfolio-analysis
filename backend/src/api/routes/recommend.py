@@ -34,6 +34,7 @@ async def recommend(
     start = time.monotonic()
     fallback_used = False
     fallback_reason: str | None = None
+    partial_records: list = []
 
     if mode == ExecutionMode.WORKFLOW:
         try:
@@ -93,11 +94,13 @@ async def recommend(
             )
             fallback_used = True
             fallback_reason = f"agent_distributed error: {exc}"
+            partial_records = getattr(exc, "records", [])
 
     result = await recommend_candidates(request.existing_funds, request.candidate_funds)
     if debug:
         result.debug_info = DebugInfo(
             execution_mode=mode.value,
+            agents_called=partial_records if fallback_used else [],
             fallback_used=fallback_used,
             fallback_reason=fallback_reason,
             total_latency_ms=round((time.monotonic() - start) * 1000, 1),

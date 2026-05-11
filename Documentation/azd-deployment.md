@@ -197,6 +197,18 @@ azd env set ENABLE_MONITORING true
 azd env set USE_EXISTING_AI_PROJECT false
 azd env set FOUNDRY_MODEL <model-name-if-used>
 ```
+#### Portfolio Assistant inputs (required for portfolio-assistant agent)
+The portfolio-assistant agent uses the Responses protocol and requires an LLM model deployment. This must be set **before** running `azd up`, otherwise the agent container will crash at startup.
+```bash
+# Required — set to the name of a model deployment in your Foundry project.
+# Check available deployments with:
+#   az cognitiveservices account deployment list \
+#     --name <ai-account-name> --resource-group <rg> --output table
+azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME <model-deployment-name>
+```
+> **Important:** If `AZURE_AI_MODEL_DEPLOYMENT_NAME` is not set, the portfolio-assistant container will fail with: `OSError: AZURE_AI_MODEL_DEPLOYMENT_NAME environment variable is not set`. The three Invocations agents (analysis, candidate, recommendation) do not require this variable — they are deterministic and do not use an LLM.
+
+The value is substituted into `agents/portfolio-assistant/agent.yaml` at deploy time via `${AZURE_AI_MODEL_DEPLOYMENT_NAME}` and injected into the container by the Foundry platform at runtime.
 ### 5.5 Review the environment file before provisioning
 ```bash
 azd env get-values
@@ -207,7 +219,64 @@ Review these especially carefully:
 - `FRONTEND_PORT`
 - `BACKEND_PORT`
 - `EXECUTION_MODE`
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME` — **required for portfolio-assistant**, must match a deployed model
 - globally unique names such as the ACR name
+
+#### Complete environment variable reference
+
+The table below lists every azd environment variable used by this project, grouped by who sets it and when.
+
+**User-set before `azd up` (required):**
+
+| Variable | Example | Used by |
+|----------|---------|---------|
+| `AZURE_SUBSCRIPTION_ID` | `xxxxxxxx-xxxx-xxxx-xxxx-...` | Bicep (subscription targeting) |
+| `AZURE_LOCATION` | `eastus2` | Bicep (resource location) |
+| `AZURE_RESOURCE_GROUP` | `rg-my-project` | Bicep (resource group name) |
+| `AZURE_AI_ACCOUNT_NAME` | `my-ai-account` | Bicep (AI Foundry account) |
+| `AZURE_AI_PROJECT_NAME` | `my-ai-project` | Bicep (Foundry project) |
+| `AZURE_PRINCIPAL_ID` | `<your-object-id>` | Bicep (RBAC assignments) |
+| `AZURE_PRINCIPAL_TYPE` | `User` | Bicep (RBAC principal type) |
+| `AZURE_TENANT_ID` | `<your-tenant-id>` | azd ai agents extension |
+
+**User-set before `azd up` (required for portfolio-assistant):**
+
+| Variable | Example | Used by |
+|----------|---------|---------|
+| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | `gpt-4.1-mini` | `agents/portfolio-assistant/agent.yaml` → container env var |
+
+**User-set before `azd up` (optional):**
+
+| Variable | Default | Used by |
+|----------|---------|---------|
+| `FRONTEND_HOST` | `0.0.0.0` | Frontend container |
+| `FRONTEND_PORT` | `3000` | Frontend container |
+| `BACKEND_HOST` | `0.0.0.0` | Backend container |
+| `BACKEND_PORT` | `8000` | Backend container |
+| `LOG_LEVEL` | `INFO` | Backend + agent containers |
+| `DATA_DIR` | `/app/data` | Backend container |
+| `AUTH_ENABLED` | `false` | Backend container |
+| `CACHE_ENABLED` | `false` | Backend container |
+| `EXECUTION_MODE` | `agent_distributed` | Backend (agent routing) |
+| `ENABLE_HOSTED_AGENTS` | `true` | Bicep (Foundry agent hosting) |
+| `ENABLE_CAPABILITY_HOST` | `true` | Bicep (Foundry capability host) |
+| `ENABLE_MONITORING` | `true` | Bicep (Log Analytics + App Insights) |
+| `USE_EXISTING_AI_PROJECT` | `false` | Bicep (reuse existing project) |
+
+**Auto-set by azd/platform (do NOT set manually):**
+
+| Variable | Set by | Description |
+|----------|--------|-------------|
+| `FOUNDRY_PROJECT_ENDPOINT` | Foundry platform | Injected into agent containers at runtime |
+| `FOUNDRY_AGENT_NAME` | Foundry platform | Agent name injected at runtime |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Foundry platform | Telemetry connection string |
+| `FRONTEND_URI` | azd (post-provision) | Deployed frontend URL |
+| `BACKEND_URI` | azd (post-provision) | Deployed backend URL |
+| `AZURE_AI_PROJECT_ENDPOINT` | azd (post-provision) | Foundry project endpoint |
+| `AZURE_CONTAINER_REGISTRY_ENDPOINT` | azd (post-provision) | ACR login server |
+| `SERVICE_*_IMAGE_NAME` | azd (post-deploy) | Built container image tags |
+| `AGENT_*_ENDPOINT` | azd ai agents ext | Agent version endpoints |
+| `AGENT_*_VERSION` | azd ai agents ext | Agent version numbers |
 ### 5.6 Provision infrastructure
 Provisioning is the control-plane step. Run it explicitly if you want to separate infra creation from app deployment:
 ```bash

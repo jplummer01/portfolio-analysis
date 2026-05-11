@@ -106,8 +106,14 @@ Install the `ai agent` extension and deploy all services:
 az login
 azd auth login
 azd ext install azure.ai.agents
+
+# Required for the portfolio-assistant agent (Responses protocol / Teams / M365)
+azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME <your-model-deployment-name>
+
 azd up
 ```
+
+> **Note:** `AZURE_AI_MODEL_DEPLOYMENT_NAME` must be set to an LLM deployment in your Foundry project (e.g. `gpt-4.1-mini`). Without it, the portfolio-assistant agent will fail to start. The three Invocations agents (analysis, candidate, recommendation) do not require this variable.
 
 This provisions:
 

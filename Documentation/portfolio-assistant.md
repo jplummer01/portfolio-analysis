@@ -88,11 +88,29 @@ The agent enforces mandatory safety rules via system instructions:
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `FOUNDRY_PROJECT_ENDPOINT` | Yes | Foundry project endpoint (auto-injected in hosted containers) |
-| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | Yes | Model deployment name for the LLM |
-| `LOG_LEVEL` | No | Logging level (default: `INFO`) |
+| Variable | Required | Set by | Description |
+|----------|----------|--------|-------------|
+| `FOUNDRY_PROJECT_ENDPOINT` | Yes | Platform (auto-injected) | Foundry project endpoint — do NOT set manually |
+| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | Yes | User (before `azd up`) | LLM model deployment name in your Foundry project |
+| `LOG_LEVEL` | No | User (optional) | Logging level (default: `INFO`) |
+
+### Pre-deployment setup
+
+`AZURE_AI_MODEL_DEPLOYMENT_NAME` must be set in the azd environment **before** running `azd up`. The value in `agent.yaml` uses `${AZURE_AI_MODEL_DEPLOYMENT_NAME}` which is substituted at deploy time.
+
+```bash
+# Check available model deployments in your Foundry project
+az cognitiveservices account deployment list \
+  --name <ai-account-name> --resource-group <rg> --output table
+
+# Set the model deployment name
+azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME gpt-4.1-mini
+```
+
+If omitted, the agent container will crash at startup with:
+```
+OSError: AZURE_AI_MODEL_DEPLOYMENT_NAME environment variable is not set.
+```
 
 ## Deployment
 

@@ -29,9 +29,16 @@ Before testing, gather the deployment outputs:
 azd env get-values
 
 # Key values you need:
-# FRONTEND_URI          — public frontend URL
-# AZURE_AI_PROJECT_ENDPOINT — Foundry project endpoint (for direct agent calls)
+# FRONTEND_URI                    — public frontend URL
+# AZURE_AI_PROJECT_ENDPOINT       — Foundry project endpoint (for direct agent calls)
+# AZURE_AI_MODEL_DEPLOYMENT_NAME  — LLM model deployment (required for portfolio-assistant)
 ```
+
+> **Important:** If `AZURE_AI_MODEL_DEPLOYMENT_NAME` was not set before `azd up`, the portfolio-assistant agent will be in a failed state. Set it and redeploy:
+> ```bash
+> azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME <model-deployment-name>
+> azd deploy portfolio-assistant
+> ```
 
 For direct agent calls via curl, you also need an access token:
 

@@ -43,6 +43,11 @@ Optional:
 - AUTH_ENABLED
 - CACHE_ENABLED
 
+### Portfolio Assistant Agent
+
+- AZURE_AI_MODEL_DEPLOYMENT_NAME (required for portfolio-assistant agent)
+- FOUNDRY_PROJECT_ENDPOINT (auto-injected in hosted containers)
+
 NO HARD-CODED VALUES ALLOWED
 
 ---

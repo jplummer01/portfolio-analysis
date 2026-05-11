@@ -20,19 +20,23 @@ flowchart LR
     Backend -->|invocations| Analysis[analysis-agent\nFoundry Hosted Agent\n:8088]
     Backend -->|invocations| Candidate[candidate-agent\nFoundry Hosted Agent\n:8088]
     Backend -->|invocations| Recommendation[recommendation-agent\nFoundry Hosted Agent\n:8088]
+    Teams[Teams / M365 Copilot Studio] -->|responses| Assistant[portfolio-assistant\nFoundry Hosted Agent\n:8088]
     ACR[Azure Container Registry] --> Frontend
     ACR --> Backend
     ACR --> Analysis
     ACR --> Candidate
     ACR --> Recommendation
+    ACR --> Assistant
     Obs[Log Analytics + App Insights] --> Frontend
     Obs --> Backend
     Obs --> Analysis
     Obs --> Candidate
     Obs --> Recommendation
+    Obs --> Assistant
     Foundry[AI Foundry Project] --> Analysis
     Foundry --> Candidate
     Foundry --> Recommendation
+    Foundry --> Assistant
 ```
 ### 2.2 Deployed services
 | Service | Host | Port | Protocol | Ingress |
@@ -42,6 +46,7 @@ flowchart LR
 | `analysis-agent` | Microsoft Foundry Agent Service | `8088` | Invocations | N/A |
 | `candidate-agent` | Microsoft Foundry Agent Service | `8088` | Invocations | N/A |
 | `recommendation-agent` | Microsoft Foundry Agent Service | `8088` | Invocations | N/A |
+| `portfolio-assistant` | Microsoft Foundry Agent Service | `8088` | Responses | N/A |
 ### 2.3 Request flow
 1. Browser requests the frontend URL.
 2. Frontend renders SSR pages and accepts user submissions.
@@ -60,10 +65,11 @@ portfolio-analysis/
 ├── agents/                   # Hosted-agent manifests
 │   ├── analysis/
 │   ├── candidate/
-│   └── recommendation/
+│   ├── recommendation/
+│   └── portfolio-assistant/  # Conversational agent (Responses protocol)
 └── .azure/                   # azd environment state (generated)
 ```
-If your checkout differs slightly, keep the same deployment rules: frontend public, backend internal, hosted agents remote, and configuration sourced from environment variables rather than hard-coded values. In the current `azure.yaml`, `frontend` and `backend-api` use `host: containerapp`, while the three agent services use `host: azure.ai.agent` with `startupCommand: python main.py`.
+If your checkout differs slightly, keep the same deployment rules: frontend public, backend internal, hosted agents remote, and configuration sourced from environment variables rather than hard-coded values. In the current `azure.yaml`, `frontend` and `backend-api` use `host: containerapp`, while the four agent services use `host: azure.ai.agent` with `startupCommand: python main.py`.
 ## 3. Prerequisites
 ### 3.1 Azure permissions
 You need an active Azure subscription, permission to create or update resources, and the right tenant access for AI Foundry hosted agents. In practice, **Owner** or **Contributor** is sufficient for most deployments, and **User Access Administrator** is required if the Bicep templates create managed identities or role assignments.

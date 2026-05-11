@@ -827,3 +827,155 @@ class TestDistributedFallbackDebugInfo:
             _restore_env_var("EXECUTION_MODE", previous_mode)
             _restore_env_var("FOUNDRY_PROJECT_ENDPOINT", previous_endpoint)
             _refresh_settings()
+
+
+# ---------------------------------------------------------------------------
+# Tests for RemotePortfolioAssistantProxy (Responses protocol)
+# ---------------------------------------------------------------------------
+
+
+class TestRemotePortfolioAssistantProxy:
+    """Verify RemotePortfolioAssistantProxy URL construction and invocation."""
+
+    def test_url_uses_responses_protocol(self):
+        from src.agents.remote import RemotePortfolioAssistantProxy
+
+        proxy = RemotePortfolioAssistantProxy(
+            "https://example.services.ai.azure.com/api/projects/my-project"
+        )
+        url = proxy._build_url()
+        assert "/protocols/openai/v1/responses" in url
+        assert "api-version=" in url
+        assert "/agents/portfolio-assistant/" in url
+
+    def test_custom_agent_name(self):
+        from src.agents.remote import RemotePortfolioAssistantProxy
+
+        proxy = RemotePortfolioAssistantProxy(
+            "https://example.services.ai.azure.com/api/projects/my-project",
+            agent_name="my-custom-assistant",
+        )
+        url = proxy._build_url()
+        assert "/agents/my-custom-assistant/" in url
+
+    def test_url_does_not_contain_invocations(self):
+        from src.agents.remote import RemotePortfolioAssistantProxy
+
+        proxy = RemotePortfolioAssistantProxy(
+            "https://example.services.ai.azure.com/api/projects/my-project"
+        )
+        url = proxy._build_url()
+        assert "/invocations" not in url
+
+    @pytest.mark.asyncio
+    async def test_invoke_success(self, monkeypatch):
+        from src.agents.remote import RemotePortfolioAssistantProxy
+
+        response_data = {
+            "id": "resp_123",
+            "output": [{"type": "message", "content": [{"type": "output_text", "text": "Analysis result"}]}],
+            "output_text": "Analysis result",
+        }
+
+        async def mock_post(self_client, url, **kwargs):
+            resp = httpx.Response(200, json=response_data, request=httpx.Request("POST", url))
+            return resp
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", mock_post)
+
+        proxy = RemotePortfolioAssistantProxy("https://example.com/api/projects/test")
+        result, record = await proxy.invoke("Analyse SPY and QQQ")
+
+        assert result == response_data
+        assert record.agent_name == "portfolio-assistant"
+        assert record.status_code == 200
+        assert record.error is None
+        assert record.request_payload == {"input": "Analyse SPY and QQQ", "stream": False}
+        assert record.response_body == response_data
+
+    @pytest.mark.asyncio
+    async def test_invoke_error_raises_remote_agent_error(self, monkeypatch):
+        from src.agents.remote import RemotePortfolioAssistantProxy, RemoteAgentError
+
+        async def mock_post(self_client, url, **kwargs):
+            resp = httpx.Response(
+                400,
+                json={"error": "bad_request"},
+                request=httpx.Request("POST", url),
+            )
+            return resp
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", mock_post)
+
+        proxy = RemotePortfolioAssistantProxy("https://example.com/api/projects/test")
+        with pytest.raises(RemoteAgentError) as exc_info:
+            await proxy.invoke("Bad request")
+
+        assert exc_info.value.record.status_code == 400
+        assert exc_info.value.record.request_payload == {"input": "Bad request", "stream": False}
+
+
+# ---------------------------------------------------------------------------
+# Tests for portfolio-assistant tool functions (via executors)
+# ---------------------------------------------------------------------------
+
+
+class TestPortfolioAssistantTools:
+    """Verify that the tool functions the portfolio-assistant uses work correctly."""
+
+    @pytest.mark.asyncio
+    async def test_analysis_executor_produces_expected_keys(self):
+        from src.agents.executors import AnalysisExecutor
+
+        executor = AnalysisExecutor()
+        result = await executor.run({"existing_funds": ["SPY", "QQQ"], "allocations": None})
+        assert "overlap_matrix" in result
+        assert "concentration" in result
+        assert "data_quality" in result
+
+    @pytest.mark.asyncio
+    async def test_candidate_executor_produces_expected_keys(self):
+        from src.agents.executors import CandidateExecutor
+
+        executor = CandidateExecutor()
+        result = await executor.run({"candidate_funds": ["ARKK", "SCHD"]})
+        assert "normalised_candidates" in result
+        assert "candidate_data_quality" in result
+
+    @pytest.mark.asyncio
+    async def test_recommendation_executor_produces_expected_keys(self):
+        from src.agents.executors import RecommendationExecutor
+        from src.services.portfolio_analysis import normalise_funds
+
+        existing = normalise_funds(["SPY"])
+        candidates = normalise_funds(["ARKK", "SCHD"])
+        executor = RecommendationExecutor()
+        result = await executor.run(
+            {"existing_normalised": existing, "candidate_normalised": candidates}
+        )
+        assert "recommendations" in result
+
+
+# ---------------------------------------------------------------------------
+# Tests for agent-metadata.yaml
+# ---------------------------------------------------------------------------
+
+
+class TestAgentMetadata:
+    """Verify the agent-metadata.yaml contains portfolio-assistant."""
+
+    def test_metadata_has_portfolio_assistant(self):
+        import yaml
+
+        metadata_path = os.path.join(
+            os.path.dirname(__file__), "..", "foundry", "agent-metadata.yaml"
+        )
+        with open(metadata_path) as f:
+            metadata = yaml.safe_load(f)
+
+        agent_names = [a["name"] for a in metadata["agents"]]
+        assert "PortfolioAssistant" in agent_names
+
+        assistant = next(a for a in metadata["agents"] if a["name"] == "PortfolioAssistant")
+        assert assistant["protocol"] == "responses"
+        assert assistant["role"] == "portfolio-assistant"

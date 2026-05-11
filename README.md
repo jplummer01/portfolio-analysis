@@ -118,6 +118,7 @@ This provisions:
 | Analysis Agent | Overlap, concentration, asset allocation, sectors, fees |
 | Candidate Agent | Candidate universe normalisation and data quality |
 | Recommendation Agent | Deterministic scoring (0–100) with explanations |
+| Portfolio Assistant | Conversational agent (Responses protocol) for Teams/M365 Copilot Studio |
 | Azure Container Registry | Container images |
 | AI Foundry Project | Hosted agent runtime |
 
@@ -164,9 +165,16 @@ Browser → Frontend (Axum :3000) → /api/* proxy → Backend (FastAPI :8000)
                                                        ↓
                                            Foundry Hosted Agents
                                     (analysis / candidate / recommendation)
+
+Teams / M365 Copilot Studio → Foundry Responses Protocol → Portfolio Assistant Agent
+                                                                    ↓
+                                                          Deterministic Executors
+                                                   (analysis / candidate / recommendation)
 ```
 
 Single-origin design — the browser only talks to the frontend. All `/api/*` requests are reverse-proxied to the backend, which can optionally delegate to Foundry hosted agents.
+
+The portfolio-assistant agent uses the Responses protocol and can be published to Teams and M365 Copilot Studio for a conversational experience.
 
 ## Documentation
 
@@ -180,6 +188,7 @@ Single-origin design — the browser only talks to the frontend. All `/api/*` re
 | [Analysis Agent](Documentation/analysis-agent.md) | Overlap, concentration, asset allocation, sector exposure, fees |
 | [Candidate Agent](Documentation/candidate-agent.md) | Holdings normalisation and data quality checks |
 | [Recommendation Agent](Documentation/recommendation-agent.md) | 0–100 scoring with component breakdowns |
+| [Portfolio Assistant](Documentation/portfolio-assistant.md) | Conversational agent for Teams/M365 Copilot Studio (Responses protocol) |
 
 ## Clean up resources
 

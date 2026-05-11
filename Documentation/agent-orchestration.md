@@ -71,6 +71,10 @@ flowchart TD
     R --> H
     S --> H
     T --> H
+    U[Teams / M365 Copilot Studio] -->|Responses protocol| V[Foundry portfolio-assistant]
+    V --> K
+    V --> L
+    V --> M
 ```
 ## 2. Why the refactor happened
 The original workflow-based implementation was useful, but it had three architectural drawbacks. First, the Functional Workflow API is explicitly experimental. Second, the old code expressed “agents” mostly as conceptual steps rather than concrete runtime units. Third, the earlier structure was less natural for hosting separate workers behind a remote invocations protocol.

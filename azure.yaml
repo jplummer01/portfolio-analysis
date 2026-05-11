@@ -60,6 +60,20 @@ services:
                     cpu: "0.5"
                     memory: 1Gi
             startupCommand: python main.py
+    portfolio-assistant:
+        project: ./agents/portfolio-assistant
+        host: azure.ai.agent
+        language: docker
+        docker:
+            path: ./Dockerfile
+            context: ../..
+            remoteBuild: true
+        config:
+            container:
+                resources:
+                    cpu: "0.5"
+                    memory: 1Gi
+            startupCommand: python main.py
 infra:
     provider: bicep
     path: ./infra

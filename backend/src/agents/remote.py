@@ -144,3 +144,88 @@ class RemoteRecommendationProxy(RemoteAgentProxy):
 
     def __init__(self, endpoint: str) -> None:
         super().__init__(endpoint, "recommendation-agent")
+
+
+class RemotePortfolioAssistantProxy:
+    """Proxy for a remotely hosted portfolio-assistant using the Responses protocol.
+
+    Unlike the Invocations-based proxies, this uses the OpenAI-compatible
+    Responses endpoint which accepts natural language input and returns
+    conversational output.
+    """
+
+    def __init__(self, agent_endpoint: str, agent_name: str = "portfolio-assistant") -> None:
+        self.agent_endpoint = agent_endpoint.rstrip("/")
+        self.agent_name = agent_name
+
+    def _build_url(self) -> str:
+        """Build the Responses protocol URL with required api-version."""
+        return (
+            f"{self.agent_endpoint}/agents/{self.agent_name}"
+            f"/endpoint/protocols/openai/v1/responses?api-version={FOUNDRY_API_VERSION}"
+        )
+
+    async def invoke(
+        self, input_text: str, *, stream: bool = False
+    ) -> tuple[dict[str, Any], AgentCallRecord]:
+        """Invoke the portfolio-assistant via the Responses protocol."""
+        url = self._build_url()
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+        }
+        credential: Any | None = None
+
+        try:
+            from azure.identity.aio import DefaultAzureCredential
+
+            credential = DefaultAzureCredential()
+            token = await credential.get_token(FOUNDRY_TOKEN_SCOPE)
+            headers["Authorization"] = f"Bearer {token.token}"
+        except ImportError:
+            logger.warning(
+                "azure-identity not installed; sending request without auth."
+            )
+        except Exception as exc:
+            logger.warning("Failed to acquire Azure credential: %s", exc)
+        finally:
+            if credential is not None:
+                await credential.close()
+
+        payload = {"input": input_text, "stream": stream}
+        start = time.monotonic()
+        status_code: int | None = None
+        error_msg: str | None = None
+        response_body: dict[str, Any] | str | None = None
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(url, json=payload, headers=headers)
+                status_code = response.status_code
+                try:
+                    response_body = response.json()
+                except Exception:
+                    response_body = response.text
+                response.raise_for_status()
+        except Exception as exc:
+            elapsed = (time.monotonic() - start) * 1000
+            error_msg = str(exc)
+            record = AgentCallRecord(
+                agent_name=self.agent_name,
+                url=url,
+                status_code=status_code,
+                latency_ms=round(elapsed, 1),
+                error=error_msg,
+                request_payload=payload,
+                response_body=response_body,
+            )
+            raise RemoteAgentError(str(exc), record) from exc
+        else:
+            elapsed = (time.monotonic() - start) * 1000
+            record = AgentCallRecord(
+                agent_name=self.agent_name,
+                url=url,
+                status_code=status_code,
+                latency_ms=round(elapsed, 1),
+                request_payload=payload,
+                response_body=response_body,
+            )
+            return response_body, record  # type: ignore[return-value]

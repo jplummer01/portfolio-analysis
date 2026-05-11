@@ -19,6 +19,11 @@ agents:
     protocol: invocations
     description: "Scores and ranks candidate funds against existing portfolio"
 
+  - name: PortfolioAssistant
+    role: portfolio-assistant
+    protocol: responses
+    description: "Conversational agent for Teams/M365 Copilot Studio — orchestrates analysis, candidate evaluation, and recommendations via LLM with deterministic tools"
+
 orchestrator:
   name: PortfolioOrchestratorAgent
   description: "Coordinates analysis and recommendation workflows using ConcurrentBuilder"

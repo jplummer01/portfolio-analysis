@@ -1,29 +1,59 @@
-# Portfolio Overlap & Fund Switch Candidate Analyzer
+# 📊 Portfolio Overlap & Fund Switch Candidate Analyzer
 
-A web application that analyzes mutual fund/ETF portfolio overlap and recommends switch candidates based on overlap reduction, performance, and data quality.
+> ⚠️ **For informational purposes only; not financial advice.**
 
-> **For informational purposes only; not financial advice.**
+Analyze mutual fund and ETF portfolio overlap, compute concentration metrics, and discover switch candidates — all with explainable, deterministic scoring.
 
-**In this quickstart, you:**
+Inspired by tools like Morningstar's Portfolio X-Ray, this app measures holdings overlap, asset allocation, sector exposure, fees, and recommends alternatives with transparent 0–100 scores.
 
-- Set up the project and install dependencies
-- Test the application locally
-- Deploy to Azure (Container Apps + Foundry hosted agents)
-- Verify your deployment and interact with the app
+---
 
-## Prerequisites
+## ✨ Features
 
-Before you begin, you need:
+| Feature | Description |
+|---------|-------------|
+| 🔍 **Overlap Analysis** | Unweighted & weighted overlap matrices across fund pairs |
+| 📈 **Concentration Metrics** | Portfolio-level concentration by holdings weight |
+| 🏗️ **Asset Allocation** | Equity/bond/cash breakdown per fund and portfolio |
+| 🌐 **Sector Exposure** | Technology, healthcare, financials, etc. per fund |
+| 💰 **Fee Comparison** | Expense ratio analysis across your holdings |
+| 🎯 **Switch Candidates** | Ranked alternatives (0–100) with score breakdowns |
+| 🤖 **Conversational AI** | Natural language interface via Teams / M365 Copilot |
+| 🛡️ **Safety by Design** | Mandatory disclaimers, no financial advice, no fabricated data |
 
-- An [Azure subscription](https://azure.microsoft.com/pricing/purchase-options/azure-account) with Contributor access
-- [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) (`azd`) version 1.24.0 or later
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`)
-- [Python 3.11+](https://www.python.org/downloads/) (tested with 3.14)
-- [Rust](https://rustup.rs/) (stable toolchain, for the frontend)
+---
 
-## Step 1: Set up the project
+## 🏗️ Architecture
 
-Clone the repository and install backend dependencies:
+```mermaid
+flowchart TD
+    Browser -->|HTTPS| Frontend[🖥️ Frontend — Axum :3000]
+    Frontend -->|/api/* proxy| Backend[⚙️ Backend — FastAPI :8000]
+    Backend -->|Invocations protocol| Agents[🤖 Foundry Hosted Agents]
+    Agents --> A1[Analysis Agent]
+    Agents --> A2[Candidate Agent]
+    Agents --> A3[Recommendation Agent]
+    Teams[💬 Teams / M365 Copilot] -->|Responses protocol| PA[🧠 Portfolio Assistant]
+    PA -->|@tool calls| Backend
+```
+
+**Single-origin design** — the browser only talks to the frontend. All `/api/*` requests are reverse-proxied to the backend. The portfolio-assistant provides a conversational interface for Teams/M365.
+
+---
+
+## 🚀 Quickstart
+
+### Prerequisites
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [Azure subscription](https://azure.microsoft.com/pricing/purchase-options/azure-account) | — | Contributor access required |
+| [`azd`](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) | ≥ 1.24.0 | Azure Developer CLI |
+| [`az`](https://learn.microsoft.com/cli/azure/install-azure-cli) | Latest | Azure CLI |
+| [Python](https://www.python.org/downloads/) | ≥ 3.11 | Backend runtime (tested with 3.14) |
+| [Rust](https://rustup.rs/) | Stable | Frontend build toolchain |
+
+### 1️⃣ Clone & install
 
 ```bash
 git clone https://github.com/your-org/portfolio-analysis.git
@@ -31,28 +61,24 @@ cd portfolio-analysis/backend
 pip install -r requirements.txt
 ```
 
-## Step 2: Test locally
+### 2️⃣ Run locally
 
-Before deploying, verify the application works on your machine.
-
-### Start the backend
-
+**Terminal 1 — Backend:**
 ```bash
 cd backend
 python3 -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### Start the frontend (separate terminal)
-
+**Terminal 2 — Frontend:**
 ```bash
 cd frontend
 export BACKEND_BASE_URL=http://127.0.0.1:8000
 cargo run
 ```
 
-App available at: http://127.0.0.1:3000
+🌐 Open http://127.0.0.1:3000
 
-### Verify locally
+### 3️⃣ Verify
 
 ```bash
 # Health check
@@ -69,143 +95,149 @@ curl -X POST http://127.0.0.1:3000/api/recommend \
   -d '{"existing_funds": ["SPY"], "candidate_funds": ["ARKK", "SCHD", "VXUS"]}'
 ```
 
-You can also open http://127.0.0.1:3000 in your browser and use the web UI to **Ingest**, **Analyse**, and **Recommend**.
+**Available stub funds:** `SPY` · `QQQ` · `VTI` · `ARKK` · `SCHD` · `VUG` · `VXUS`
 
-Available stub funds: `SPY`, `QQQ`, `VTI`, `ARKK`, `SCHD`, `VUG`, `VXUS`
-
-### Debug mode
-
-Add `?debug=true` to any analyse or recommend request to see execution diagnostics (which mode ran, which agents were called, latency, fallback status):
-
-```bash
-# Debug analyse
-curl -X POST http://127.0.0.1:3000/api/analyse?debug=true \
-  -H "Content-Type: application/json" \
-  -d '{"existing_funds": ["SPY", "QQQ"]}'
-
-# Debug recommend
-curl -X POST http://127.0.0.1:3000/api/recommend?debug=true \
-  -H "Content-Type: application/json" \
-  -d '{"existing_funds": ["SPY"], "candidate_funds": ["ARKK", "SCHD"]}'
-```
-
-The response includes a `debug_info` object with `execution_mode`, `agents_called`, `fallback_used`, and `total_latency_ms`. In the web UI, check the **Debug mode** checkbox on the Analyse or Recommend page.
-
-### Run tests
+### 4️⃣ Run tests
 
 ```bash
 cd backend
 python3 -m pytest tests/ -v
 ```
 
-## Step 3: Deploy to Azure
+---
 
-Install the `ai agent` extension and deploy all services:
+## 🐛 Debug Mode
+
+Append `?debug=true` to any request to see execution diagnostics:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/analyse?debug=true \
+  -H "Content-Type: application/json" \
+  -d '{"existing_funds": ["SPY", "QQQ"]}'
+```
+
+Returns a `debug_info` object with:
+- `execution_mode` — which agent mode ran
+- `agents_called` — remote agent call details (URL, status, latency)
+- `fallback_used` — whether the system fell back to direct execution
+- `total_latency_ms` — end-to-end timing
+
+In the web UI, toggle the **Debug mode** checkbox on the Analyse or Recommend page.
+
+---
+
+## ☁️ Deploy to Azure
+
+### Step 1: Authenticate & configure
 
 ```bash
 az login
 azd auth login
 azd ext install azure.ai.agents
 
-# Required for the portfolio-assistant agent (Responses protocol / Teams / M365)
+# Required for the portfolio-assistant (conversational AI agent)
 azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME <your-model-deployment-name>
-
-azd up
 ```
 
-> **Note:** `AZURE_AI_MODEL_DEPLOYMENT_NAME` must be set to an LLM deployment in your Foundry project (e.g. `gpt-4.1-mini`). Without it, the portfolio-assistant agent will fail to start. The three Invocations agents (analysis, candidate, recommendation) do not require this variable.
+> 💡 Set `AZURE_AI_MODEL_DEPLOYMENT_NAME` to an LLM deployment in your Foundry project (e.g. `gpt-4.1-mini`). The three deterministic agents don't require this.
+
+See the [Azure Deployment Guide](Documentation/azd-deployment.md) for the full list of environment variables.
+
+### Step 2: Deploy
+
+```bash
+azd up
+```
 
 This provisions:
 
 | Resource | Purpose |
 |----------|---------|
-| Frontend Container App | Public entrypoint (Rust/Leptos SSR on port 3000) |
-| Backend Container App | Internal API (Python/FastAPI on port 8000) |
-| Analysis Agent | Overlap, concentration, asset allocation, sectors, fees |
-| Candidate Agent | Candidate universe normalisation and data quality |
-| Recommendation Agent | Deterministic scoring (0–100) with explanations |
-| Portfolio Assistant | Conversational agent (Responses protocol) for Teams/M365 Copilot Studio |
-| Azure Container Registry | Container images |
-| AI Foundry Project | Hosted agent runtime |
+| 🖥️ Frontend Container App | Public entrypoint (Rust/Leptos SSR on port 3000) |
+| ⚙️ Backend Container App | Internal API (Python/FastAPI on port 8000) |
+| 🔍 Analysis Agent | Overlap, concentration, asset allocation, sectors, fees |
+| 📋 Candidate Agent | Candidate universe normalisation and data quality |
+| 🎯 Recommendation Agent | Deterministic scoring (0–100) with explanations |
+| 🧠 Portfolio Assistant | Conversational AI (Responses protocol) for Teams/M365 |
+| 📦 Azure Container Registry | Container images |
+| 🤖 AI Foundry Project | Hosted agent runtime |
 
-> **Tip:** Run `azd down` when finished to delete resources and stop incurring charges.
-
-## Step 4: Verify the deployment
-
-After `azd up` completes, check that the frontend is responding:
+### Step 3: Verify
 
 ```bash
-curl https://<your-frontend-url>/api/health
+# Get the deployed URL
+FRONTEND_URL=$(azd env get-values | grep FRONTEND_URI | cut -d'=' -f2 | tr -d '"')
+
+curl $FRONTEND_URL/api/health
+# → {"status": "healthy"}
 ```
 
-You should see:
+Open the frontend URL in your browser:
 
-```json
-{"status": "healthy"}
-```
-
-Open the frontend URL in your browser. The web UI has three tabs:
-
-| Tab | Action | What you see |
-|-----|--------|--------------|
+| Tab | What you do | What you see |
+|-----|-------------|--------------|
 | **Ingest** | Enter fund symbols | Holdings loaded from stub data |
-| **Analyse** | Click "Analyse portfolio" | Overlap matrices, concentration, asset allocation, sectors, fees |
-| **Recommend** | Click "Score candidates" | Ranked candidates (0–100), breakdowns, explanations |
+| **Analyse** | Click "Analyse portfolio" | Overlap matrices, concentration, sectors, fees |
+| **Recommend** | Click "Score candidates" | Ranked alternatives with score breakdowns |
 
-Test the API directly against the deployed app:
+> 🧹 Run `azd down` when finished to delete resources and stop charges.
 
-```bash
-curl -X POST https://<your-frontend-url>/api/analyse \
-  -H "Content-Type: application/json" \
-  -d '{"existing_funds": ["SPY", "QQQ", "VTI"]}'
+---
 
-curl -X POST https://<your-frontend-url>/api/recommend \
-  -H "Content-Type: application/json" \
-  -d '{"existing_funds": ["SPY"], "candidate_funds": ["ARKK", "SCHD", "VXUS"]}'
+## 💬 Publish to Teams & M365 Copilot
+
+The portfolio-assistant agent can be published to Microsoft Teams and Microsoft 365 Copilot for a conversational experience:
+
+```mermaid
+flowchart LR
+    A[azd up] --> B[Test in Foundry Playground]
+    B --> C[Publish via Foundry Portal]
+    C --> D[Users chat in Teams / M365]
 ```
 
-## Architecture
+See **[Publishing to Teams & M365](Documentation/publishing-teams-m365.md)** for the complete step-by-step guide including prerequisites, RBAC roles, scope options, and troubleshooting.
 
-```
-Browser → Frontend (Axum :3000) → /api/* proxy → Backend (FastAPI :8000)
-                                                       ↓
-                                           Foundry Hosted Agents
-                                    (analysis / candidate / recommendation)
+---
 
-Teams / M365 Copilot Studio → Foundry Responses Protocol → Portfolio Assistant Agent
-                                                                    ↓
-                                                          Deterministic Executors
-                                                   (analysis / candidate / recommendation)
-```
+## 📚 Documentation
 
-Single-origin design — the browser only talks to the frontend. All `/api/*` requests are reverse-proxied to the backend, which can optionally delegate to Foundry hosted agents.
+### Architecture & Design
 
-The portfolio-assistant agent uses the Responses protocol and can be published to Teams and M365 Copilot Studio for a conversational experience.
+| | Document | Description |
+|-|----------|-------------|
+| 🏗️ | [Backend Architecture](Documentation/backend.md) | FastAPI server, API endpoints, deterministic tools, Pydantic models |
+| 🖥️ | [Frontend Architecture](Documentation/frontend.md) | Rust/Leptos SSR, Axum server, reverse proxy, page descriptions |
+| 🔄 | [Multi-Agent Orchestration](Documentation/multi-agent-orchestration.md) | MAF workflows, analysis pipelines, fallback strategy |
+| 🤖 | [Agent Orchestration](Documentation/agent-orchestration.md) | Execution modes, shared services, Foundry deployment |
 
-## Documentation
+### Hosted Agents
 
-| Document | Description |
-|----------|-------------|
-| [Backend Architecture](Documentation/backend.md) | FastAPI server, API endpoints, deterministic tools, Pydantic models |
-| [Frontend Architecture](Documentation/frontend.md) | Rust/Leptos SSR, Axum server, reverse proxy, page descriptions |
-| [Multi-Agent Orchestration](Documentation/multi-agent-orchestration.md) | MAF @workflow/@step, analysis pipelines, fallback strategy |
-| [Agent Orchestration Architecture](Documentation/agent-orchestration.md) | Orchestrator/sub-agent pattern, execution modes, shared services |
-| [Azure Deployment Guide](Documentation/azd-deployment.md) | Full deployment flow, environment variables, troubleshooting |
-| [Analysis Agent](Documentation/analysis-agent.md) | Overlap, concentration, asset allocation, sector exposure, fees |
-| [Candidate Agent](Documentation/candidate-agent.md) | Holdings normalisation and data quality checks |
-| [Recommendation Agent](Documentation/recommendation-agent.md) | 0–100 scoring with component breakdowns |
-| [Portfolio Assistant](Documentation/portfolio-assistant.md) | Conversational agent for Teams/M365 Copilot Studio (Responses protocol) |
-| [Testing Deployed Agents](Documentation/testing-deployed-agents.md) | How to test all agents after `azd up`: CLI, Foundry Playground, web frontend |
+| | Document | Protocol | Description |
+|-|----------|----------|-------------|
+| 🔍 | [Analysis Agent](Documentation/analysis-agent.md) | Invocations | Overlap, concentration, asset allocation, sectors, fees |
+| 📋 | [Candidate Agent](Documentation/candidate-agent.md) | Invocations | Holdings normalisation and data quality checks |
+| 🎯 | [Recommendation Agent](Documentation/recommendation-agent.md) | Invocations | 0–100 composite scoring with breakdowns |
+| 🧠 | [Portfolio Assistant](Documentation/portfolio-assistant.md) | Responses | Conversational AI for Teams/M365 Copilot Studio |
 
-## Clean up resources
+### Operations
 
-To delete all deployed resources:
+| | Document | Description |
+|-|----------|-------------|
+| ☁️ | [Azure Deployment Guide](Documentation/azd-deployment.md) | Full `azd up` workflow, env vars, troubleshooting |
+| 🧪 | [Testing Deployed Agents](Documentation/testing-deployed-agents.md) | CLI, Foundry Playground, and web frontend testing |
+| 💬 | [Publishing to Teams & M365](Documentation/publishing-teams-m365.md) | Publish portfolio-assistant to Teams and M365 Copilot |
+
+---
+
+## 🧹 Clean up
 
 ```bash
 azd down
 ```
 
-## License
+---
+
+## 📄 License
 
 This project is for demonstration purposes.
 

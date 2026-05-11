@@ -173,7 +173,7 @@ class TestDistributedOrchestratorAgent:
             async def fake_invoke(self, payload):
                 assert payload == {"existing_funds": ["SPY", "QQQ"], "allocations": None}
                 from src.api.models.debug import AgentCallRecord
-                record = AgentCallRecord(agent_name="analysis-agent", url="http://example.com/foundry/agents/analysis-agent/endpoint/protocols/invocations")
+                record = AgentCallRecord(agent_name="analysis-agent", url="http://example.com/foundry/agents/analysis-agent/endpoint/protocols/invocations?api-version=v1")
                 return expected, record
 
             monkeypatch.setattr(distributed_module.RemoteAnalysisProxy, "invoke", fake_invoke)
@@ -279,7 +279,7 @@ class TestRemoteAgentProxy:
 
         assert (
             proxy._build_url()
-            == "http://example.com/foundry/agents/analysis-agent/endpoint/protocols/invocations"
+            == "http://example.com/foundry/agents/analysis-agent/endpoint/protocols/invocations?api-version=v1"
         )
 
     @pytest.mark.asyncio
@@ -340,15 +340,16 @@ class TestRemoteAgentProxy:
             "http://example.com/foundry/"
         ).invoke({"existing_funds": ["SPY"]})
 
-        assert captured["scope"] == "https://cognitiveservices.azure.com/.default"
+        assert captured["scope"] == "https://ai.azure.com/.default"
         assert captured["timeout"] == 60.0
         assert (
             captured["url"]
-            == "http://example.com/foundry/agents/analysis-agent/endpoint/protocols/invocations"
+            == "http://example.com/foundry/agents/analysis-agent/endpoint/protocols/invocations?api-version=v1"
         )
         assert captured["payload"] == {"existing_funds": ["SPY"]}
         assert captured["headers"] == {
             "Content-Type": "application/json",
+            "Foundry-Features": "HostedAgents=V1Preview",
             "Authorization": "Bearer token-value",
         }
         assert captured["closed"] is True

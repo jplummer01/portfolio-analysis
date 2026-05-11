@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -11,6 +12,16 @@ import httpx
 from src.api.models.debug import AgentCallRecord
 
 logger = logging.getLogger(__name__)
+
+# Foundry platform API version and preview feature flag
+FOUNDRY_API_VERSION = os.environ.get("FOUNDRY_API_VERSION", "v1")
+FOUNDRY_FEATURES = os.environ.get(
+    "FOUNDRY_FEATURES", "HostedAgents=V1Preview"
+)
+# Token scope for Foundry hosted agent endpoints
+FOUNDRY_TOKEN_SCOPE = os.environ.get(
+    "FOUNDRY_TOKEN_SCOPE", "https://ai.azure.com/.default"
+)
 
 
 class RemoteAgentError(Exception):
@@ -33,10 +44,10 @@ class RemoteAgentProxy:
         self.agent_name = agent_name
 
     def _build_url(self) -> str:
-        """Build the invocations protocol URL."""
+        """Build the invocations protocol URL with required api-version."""
         return (
             f"{self.agent_endpoint}/agents/{self.agent_name}"
-            "/endpoint/protocols/invocations"
+            f"/endpoint/protocols/invocations?api-version={FOUNDRY_API_VERSION}"
         )
 
     async def invoke(
@@ -44,16 +55,17 @@ class RemoteAgentProxy:
     ) -> tuple[dict[str, Any], AgentCallRecord]:
         """Invoke the remote agent and return (result, call_record)."""
         url = self._build_url()
-        headers = {"Content-Type": "application/json"}
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+            "Foundry-Features": FOUNDRY_FEATURES,
+        }
         credential: Any | None = None
 
         try:
             from azure.identity.aio import DefaultAzureCredential
 
             credential = DefaultAzureCredential()
-            token = await credential.get_token(
-                "https://cognitiveservices.azure.com/.default"
-            )
+            token = await credential.get_token(FOUNDRY_TOKEN_SCOPE)
             headers["Authorization"] = f"Bearer {token.token}"
         except ImportError:
             logger.warning(

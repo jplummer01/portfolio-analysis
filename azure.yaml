@@ -46,8 +46,8 @@ services:
         language: docker
         docker:
             remoteBuild: true
-    recommendation-agent:
-        project: ./agents/recommendation
+    portfolio-assistant:
+        project: ./agents/portfolio-assistant
         host: azure.ai.agent
         language: docker
         docker:
@@ -60,8 +60,8 @@ services:
                     cpu: "0.5"
                     memory: 1Gi
             startupCommand: python main.py
-    portfolio-assistant:
-        project: ./agents/portfolio-assistant
+    recommendation-agent:
+        project: ./agents/recommendation
         host: azure.ai.agent
         language: docker
         docker:

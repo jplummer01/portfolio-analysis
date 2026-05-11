@@ -23,6 +23,11 @@ The application is designed as a single-origin system: the browser communicates 
 6. **[Analysis Agent](analysis-agent.md)** — Existing portfolio analysis agent: overlap matrices, concentration, data quality, asset allocation, sector exposure, and fee analysis
 7. **[Candidate Agent](candidate-agent.md)** — Candidate universe evaluation agent: holdings normalisation and data quality checks
 8. **[Recommendation Agent](recommendation-agent.md)** — Deterministic candidate scoring agent: 0–100 composite scoring with overlap reduction, performance, data quality, and cost components
+9. **[Portfolio Assistant](portfolio-assistant.md)** — Conversational agent for Teams/M365 Copilot Studio using the Responses protocol
+
+### Operations
+
+10. **[Testing Deployed Agents](testing-deployed-agents.md)** — How to test all agents after `azd up`: CLI via curl, Foundry Playground, and web frontend
 
 ## Quick Links
 

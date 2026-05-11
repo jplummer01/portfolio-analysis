@@ -189,6 +189,7 @@ The portfolio-assistant agent uses the Responses protocol and can be published t
 | [Candidate Agent](Documentation/candidate-agent.md) | Holdings normalisation and data quality checks |
 | [Recommendation Agent](Documentation/recommendation-agent.md) | 0–100 scoring with component breakdowns |
 | [Portfolio Assistant](Documentation/portfolio-assistant.md) | Conversational agent for Teams/M365 Copilot Studio (Responses protocol) |
+| [Testing Deployed Agents](Documentation/testing-deployed-agents.md) | How to test all agents after `azd up`: CLI, Foundry Playground, web frontend |
 
 ## Clean up resources
 

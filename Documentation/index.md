@@ -28,6 +28,7 @@ The application is designed as a single-origin system: the browser communicates 
 ### Operations
 
 10. **[Testing Deployed Agents](testing-deployed-agents.md)** — How to test all agents after `azd up`: CLI via curl, Foundry Playground, and web frontend
+11. **[Publishing to Teams & M365](publishing-teams-m365.md)** — Step-by-step guide to publish portfolio-assistant to Microsoft Teams and Microsoft 365 Copilot
 
 ## Quick Links
 

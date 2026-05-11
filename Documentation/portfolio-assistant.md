@@ -130,14 +130,13 @@ portfolio-assistant:
 
 ### Publishing to Teams / M365 Copilot Studio
 
-After deployment with `azd up`:
+After deployment with `azd up`, the portfolio-assistant can be published to Teams and Microsoft 365 Copilot. This requires the Responses protocol (which the agent already implements) and appropriate RBAC roles.
 
-1. Navigate to the AI Foundry portal
-2. Select the `portfolio-assistant` agent
-3. Use the **Publish** action to publish to Teams or M365 Copilot Studio
-4. The platform automatically handles the **Activity protocol** for Teams channel integration
+For the complete step-by-step publishing workflow, including prerequisites, scope options, admin approval, troubleshooting, and limitations, see:
 
-The Responses protocol powers the agent logic; the Activity protocol is managed by the Foundry platform.
+**→ [Publishing to Teams & M365](publishing-teams-m365.md)**
+
+The Responses protocol powers the agent logic; the Activity protocol for Teams channel integration is managed automatically by the Foundry platform.
 
 ## Local Testing
 

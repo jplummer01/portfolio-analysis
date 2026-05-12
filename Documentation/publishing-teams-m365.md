@@ -241,7 +241,7 @@ To change the name, description, or other metadata visible in Teams/M365:
 flowchart TD
     A[Teams / M365 Copilot] -->|Activity protocol| B[Foundry Platform]
     B -->|Responses protocol| C[portfolio-assistant container]
-    C -->|@tool calls| D[Deterministic executors]
+    C -->|"@tool calls"| D[Deterministic executors]
     D --> E[Overlap / Scoring / Analysis]
 ```
 
